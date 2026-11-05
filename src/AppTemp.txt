@@ -1,0 +1,334 @@
+﻿import { useState } from 'react'
+import { AuthProvider, useAuth } from '@/contexts/AuthContext'
+import { auth } from '@/firebase'
+import { sendPasswordResetEmail } from 'firebase/auth'
+
+const hero = 'https://images.unsplash.com/photo-1616588589676-62b3bd4ff6d2?auto=format&fit=crop&w=1800&q=88'
+const photos = [
+  'https://images.unsplash.com/photo-1593305841991-05c297ba4575?auto=format&fit=crop&w=900&q=85',
+  'https://images.unsplash.com/photo-1603481588273-2f908a9a7a1b?auto=format&fit=crop&w=900&q=85',
+  'https://images.unsplash.com/photo-1696710257827-75e2e5954059?auto=format&fit=crop&w=900&q=85',
+]
+
+type View = 'home' | 'games' | 'dashboard' | 'messages' | 'social' | 'profile' | 'settings' | 'notifications' | 'admin' | 'users' | 'manage-games' | 'manage-hero' | 'admin-messages' | 'social-links'
+type Auth = null | 'login' | 'signup' | 'forgot' | 'verify'
+
+type DemoUser = { id: number; name: string; email: string; role: string; active: boolean }
+type DemoGame = { id: number; title: string; category: string; status: string; visible: boolean; image: string }
+type HeroBanner = { eyebrow: string; title: string; accent: string; description: string; primaryCta: string; primaryUrl: string; secondaryCta: string; image: string; visible: boolean }
+
+const Icon = ({ name, size = 20 }: { name: string; size?: number }) => {
+  const paths: Record<string, React.ReactNode> = {
+    play: <><path d="M8 5v14l11-7z"/></>,
+    arrow: <><path d="M5 12h14M14 7l5 5-5 5"/></>,
+    grid: <><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></>,
+    game: <><path d="M6 9h12a4 4 0 0 1 3.7 5.5l-1.2 3a2 2 0 0 1-3.2.8L15 16H9l-2.3 2.3a2 2 0 0 1-3.2-.8l-1.2-3A4 4 0 0 1 6 9Z"/><path d="M7 12v4M5 14h4M17 13h.01M19 15h.01"/></>,
+    chat: <><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></>,
+    bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></>,
+    user: <><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></>,
+    settings: <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a2 2 0 0 0 .4 2.2l.1.1-2.6 2.6-.1-.1a2 2 0 0 0-2.2-.4 2 2 0 0 0-1.2 1.8V21h-3.6v-.2A2 2 0 0 0 9 19a2 2 0 0 0-2.2.4l-.1.1-2.6-2.6.1-.1a2 2 0 0 0 .4-2.2A2 2 0 0 0 3 13.4H3V10h.2A2 2 0 0 0 5 8.8a2 2 0 0 0-.4-2.2l-.1-.1 2.6-2.6.1.1A2 2 0 0 0 9.4 4 2 2 0 0 0 10.6 2h3.6v.2A2 2 0 0 0 15.4 4a2 2 0 0 0 2.2-.4l.1-.1 2.6-2.6-.1.1a2 2 0 0 0-.4 2.2 2 2 0 0 0 1.8 1.2h.2V13h-.2a2 2 0 0 0-1.8 1.2Z"/></>,
+    search: <><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></>,
+    shield: <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></>,
+    menu: <><path d="M4 6h16M4 12h16M4 18h16"/></>,
+    close: <><path d="m6 6 12 12M18 6 6 18"/></>,
+    send: <><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></>,
+  }
+function Home({ go, auth }: { go: (v: View) => void; auth: (v: Auth) => void }) {
+  const [menu, setMenu] = useState(false)
+  return (
+    <div className="public">
+      <nav className="topnav">
+        <Logo/>
+        <div className={`navlinks ${menu ? 'open' : ''}`}>
+          <button onClick={() => go('home')}>Home</button><button onClick={() => go('games')}>Games</button>
+          <button onClick={() => document.querySelector('#about')?.scrollIntoView()}>About</button>
+          <button onClick={() => document.querySelector('#faq')?.scrollIntoView()}>FAQ</button>
+        </div>
+        <div className="navActions"><button className="textBtn" onClick={() => auth('login')}>Log in</button><Button onClick={() => auth('signup')}>Sign up</Button></div>
+      </nav>
+      <section className="hero" id="home">
+        <img src={hero} alt="Hero"/>
+        <div className="heroShade"/>
+        <div className="heroContent">
+          <span className="eyebrow"><Icon name="play" size={14}/> Play â€¢ Connect â€¢ Discover</span>
+          <h1>Your next favorite game is waiting.</h1>
+          <p>One profile. A whole world of play. Explore curated titles, track your activity, and connect with players.</p>
+          <div style={{ marginTop: 24, display: 'flex', gap: 12 }}>
+            <Button>Browse games</Button>
+            <Button secondary onClick={() => auth('login')}>Log in</Button>
+          </div>
+        </div>
+      </section>
+      <section className="explore" id="about">
+        <div className="sectionHead"><span className="kicker">Explore</span><h2>Featured games</h2></div>
+        <div className="exploreGrid">{[...photos, ...photos].map((p, i) => (
+          <article key={i}><div><img src={p} alt="Game"/><button><Icon name="play"/></button></div><span>{i < 2 ? 'FEATURED' : 'POPULAR'}</span><h3>{['Neon Vanguard', 'Shadow Circuit', 'Astral Frontier'][i % 3]}</h3><p>{['Action â€¢ Strategy', 'Racing â€¢ Arcade', 'Adventure â€¢ Co-op'][i % 3]}</p><button onClick={() => go('dashboard')}>View details â†’</button></article>
+        ))}</div>
+      </section>
+      <section className="faq" id="faq">
+        <div className="sectionHead"><span className="kicker">Help</span><h2>Frequently asked questions</h2></div>
+        <div className="faqGrid">{['What is playwithnicole?', 'How do I save my games?', 'Can I connect with friends?', 'Is it free?', 'How do I reset my password?', 'Where can I find the community?'].map((q, i) => (
+          <details key={q} open={i === 0}><summary>{q}<span>+</span></summary><p>{i === 0 ? 'playwithnicole is a curated gaming discovery and community platform. Create a profile to save games, get updates, and connect with players.' : 'Open this item to learn more. Full policy and support content can be configured by administrators.'}</p></details>
+        ))}</div>
+      </section>
+      <footer><div><Logo/><p>Play something worth remembering.</p></div><div><b>Explore</b><span>Games</span><span>Community</span><span>Updates</span></div><div><b>Support</b><span>Help center</span><span>Privacy</span><span>Terms</span></div><div><b>Connect</b><span>Facebook</span><span>Telegram</span><span>Instagram</span><span>Signal</span><span>WhatsApp</span></div><small>Â© 2025 playwithnicole. All game and account data shown is illustrative.</small></footer>
+    </div>
+  )
+}
+function PageTitle({ kicker, title, sub }: { kicker: string; title: string; sub: string }) {
+  return <div className="pageHead"><span className="kicker">{kicker}</span><h1>{title}</h1><p>{sub}</p></div>
+}
+
+function Modal({ title, children, close }: { title: string; children: React.ReactNode; close: () => void }) {
+  return <div className="dialogShade" role="presentation" onMouseDown={e => e.target === e.currentTarget && close()}><section className="dialog" role="dialog" aria-modal="true"><div className="dialogHead"><h2>{title}</h2><button onClick={close} aria-label="Close"><Icon name="close"/></button></div>{children}</section></div>
+}
+
+function AuthModal({ mode, setMode, enter }: { mode: Exclude<Auth, null>; setMode: (a: Auth) => void; enter: () => void }) {
+  const { signUp, signIn, signInWithGoogle, loading } = useAuth()
+  const [formError, setFormError] = useState<string | null>(null)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [fullName, setFullName] = useState('')
+  const [username, setUsername] = useState('')
+  const copy = {
+    login: ['Welcome back', 'Sign in to continue your adventure.'],
+    signup: ['Create your account', 'Join the community and start exploring.'],
+    forgot: ['Reset your password', "We'll send secure reset instructions to your inbox."],
+    verify: ['Check your inbox', 'We sent a verification link to player@example.com.'],
+  }[mode]
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setFormError(null)
+    try {
+      if (mode === 'forgot') {
+        await sendPasswordResetEmail(auth, email)
+        setMode('verify')
+        return
+      }
+      if (mode === 'signup') { await signUp(email, password, fullName) } else { await signIn(email, password) }
+      enter()
+    } catch (err: any) { setFormError(err?.message || 'Something went wrong. Please try again.') }
+  }
+
+  const handleGoogle = async () => {
+    setFormError(null)
+    try { await signInWithGoogle(); enter() } catch (err: any) { setFormError(err?.message || 'Google sign-in failed. Please try again.') }
+  }
+
+  return (
+    <div className="modal">
+      <div className="modalArt" style={{ backgroundImage: `url(${hero})` }}>
+        <Logo/>
+        <div>
+          <span className="kicker">PLAY â€¢ CONNECT â€¢ DISCOVER</span>
+          <h2>Your next favorite game is waiting.</h2>
+          <p>One profile. A whole world of play.</p>
+        </div>
+      </div>
+      <div className="formSide">
+        <button className="modalClose" onClick={() => setMode(null)}><Icon name="close"/></button>
+        <div className="formWrap">
+          <span className="formLogo"><Icon name={mode === 'verify' ? 'shield' : 'game'} size={26}/></span>
+          <h2>{copy[0]}</h2>
+          <p>{copy[1]}</p>
+          {formError && <div className="toast error" style={{ marginBottom: 16 }}>{formError}</div>}
+          {mode === 'verify' ? (
+            <>
+              <div className="verifyArt">âœ¦</div>
+              <Button onClick={enter}>Continue to dashboard</Button>
+              <button className="formLink">Resend verification email</button>
+            </>
+          ) : (
+            <form onSubmit={handleSubmit}>
+              {mode === 'signup' && (
+                <div className="fieldRow">
+                  <label>Full name<input placeholder="Nicole Player" value={fullName} onChange={e => setFullName(e.target.value)}/></label>
+                  <label>Username<input placeholder="nicoleplays" value={username} onChange={e => setUsername(e.target.value)}/></label>
+                </div>
+              )}
+              <label>{mode === 'login' ? 'Email or username' : 'Email address'}<input type="text" placeholder={mode === 'login' ? 'you@example.com or username' : 'you@example.com'} value={email} onChange={e => setEmail(e.target.value)}/></label>
+              {mode !== 'forgot' && (
+                <label>Password
+                  <div className="inputWrap"><input type="password" placeholder="At least 8 characters" value={password} onChange={e => setPassword(e.target.value)}/></div>
+                </label>
+              )}
+              {mode === 'signup' && (
+                <>
+                  <div className="strength"><span/><span/><span/><span/></div>
+                  <label className="check"><input type="checkbox"/> I agree to the Terms and Privacy Policy</label>
+                </>
+              )}
+              {mode === 'login' && (
+                <div className="formMeta">
+                  <label className="check"><input type="checkbox"/> Remember me</label>
+                  <button type="button" onClick={() => setMode('forgot')}>Forgot password?</button>
+                </div>
+              )}
+              <Button disabled={loading}>{mode === 'login' ? 'Log in' : mode === 'signup' ? 'Create account' : 'Send reset link'} <Icon name="arrow" size={16}/></Button>
+              {mode === 'login' && <button className="google" type="button" onClick={handleGoogle} disabled={loading}>G&nbsp;&nbsp; Continue with Google <small>visual only</small></button>}
+            </form>
+          )}
+          <p className="switch">{mode === 'login' ? 'New to playwithnicole? ' : mode === 'signup' ? 'Already have an account? ' : ''}<button onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}>{mode === 'login' ? 'Create an account' : 'Back to login'}</button></p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const sideItems: [string, string, View][] = [
+  ['grid', 'Overview', 'dashboard'],
+  ['game', 'Explore Games', 'games'],
+  ['chat', 'Messages & Support', 'messages'],
+  ['bell', 'Notifications', 'notifications'],
+  ['arrow', 'Social Connections', 'social'],
+  ['user', 'My Profile', 'profile'],
+  ['settings', 'Settings', 'settings'],
+]
+function Dashboard({ view, go, logout }: { view: View; go: (v: View) => void; logout: () => void }) {
+  const [games, setGames] = useState<DemoGame[]>([
+    { id: 1, title: 'Neon Vanguard', category: 'Action', status: 'Published', visible: true, image: photos[0] },
+    { id: 2, title: 'Shadow Circuit', category: 'Racing', status: 'Published', visible: true, image: photos[1] },
+    { id: 3, title: 'Astral Frontier', category: 'Adventure', status: 'Draft', visible: false, image: photos[2] },
+  ])
+  const [users] = useState<DemoUser[]>([
+    { id: 1, name: 'Kai Morgan', email: 'kai@example.com', role: 'player', active: true },
+    { id: 2, name: 'Mika Chen', email: 'mika@example.com', role: 'player', active: true },
+    { id: 3, name: 'Jordan Ellis', email: 'jordan@example.com', role: 'moderator', active: false },
+  ])
+  const [filter, setFilter] = useState<'All' | 'Published' | 'Draft' | 'Archived'>('All')
+  const [query, setQuery] = useState('')
+  const [flash, setFlash] = useState('')
+  const [notice, setNotice] = useState('')
+  const [gameOpen, setGameOpen] = useState(false)
+  const [editing, setEditing] = useState<DemoGame | undefined>()
+
+  const shown = games.filter(g => (filter === 'All' || g.status === filter) && `${g.title} ${g.category}`.toLowerCase().includes(query.toLowerCase()))
+
+  if (view === 'dashboard') {
+    return (
+      <>
+        <PageTitle kicker="PLAYER SPACE" title="Overview" sub="Your games, activity, and community updates at a glance."/>
+        <div className="welcomeGrid">
+          {['Explore', 'My Library', 'Friends', 'Activity'].map((x, i) => (
+            <article key={x} className="panel"><span className="av">{x[0]}</span><div><b>{x}</b><small>{i === 0 ? 'Discover new titles' : i === 1 ? 'Your saved games' : i === 2 ? 'Connect with players' : 'Recent activity'}</small></div><button>Open â†’</button></article>
+          ))}
+        </div>
+      </>
+    )
+  }
+  if (view === 'games') {
+    return (
+      <>
+        <PageTitle kicker="EXPLORE" title="Games" sub="Browse the catalog and jump into your next adventure."/>
+        <div className="exploreHeader"><input placeholder="Search games..." value={query} onChange={e => setQuery(e.target.value)}/><div className="chipRow"><button onClick={() => setFilter('All')}>All</button><button onClick={() => setFilter('Published')}>Published</button><button onClick={() => setFilter('Draft')}>Draft</button></div></div>
+        <div className="exploreGrid">{shown.map(g => (
+          <article key={g.id} className="gameCard"><div className="gameCover"><img src={g.image} alt={g.title}/><i className={`status ${g.status === 'Published' ? 'active' : ''}`}>{g.status}</i></div><div className="gameBody"><span>{g.category}</span><h3>{g.title}</h3><p>{g.visible ? 'Visible in catalog' : 'Hidden from catalog'}</p><div className="cardActions"><button>Play</button><button secondary>{g.visible ? 'Hide' : 'Show'}</button></div></div></article>
+        ))}</div>
+      </>
+    )
+  }
+  if (view === 'profile') {
+    const { user, profile } = useAuth()
+    return (
+      <>
+        <PageTitle kicker="YOUR ACCOUNT" title="My profile" sub="Manage your identity, picture, and game activity."/>
+        <div className="profileCard">
+          <div className="profileHead">
+            <span className="av">{user?.email?.[0]?.toUpperCase() || '?'}</span>
+            <div>
+              <b>{profile?.displayName || user?.email || 'Player'}</b>
+              <small>{user?.email}</small>
+            </div>
+          </div>
+          <Button onClick={logout}>Sign out</Button>
+        </div>
+      </>
+    )
+  }
+  if (view === 'settings') {
+    const { signOut } = useAuth()
+    const [saved, setSaved] = useState('')
+    const save = (message: string) => { setSaved(message); setTimeout(() => setSaved(''), 2200) }
+    return (
+      <>
+        <PageTitle kicker="YOUR ACCOUNT" title="Account settings" sub="Control password, notifications, privacy, and account access."/>
+        {saved && <div className="toast success"><Icon name="shield" size={16}/>{saved} <small>Changes stored for this session.</small></div>}
+        <div className="settingsPanel">
+          <label>Change password<div className="toggleRow"><button onClick={() => setMode('forgot')}>Reset via email</button></div></label>
+          <div className="dangerZone"><button className="danger" onClick={() => { signOut(); go('home') }}>Delete account</button></div>
+          <Button onClick={() => save('Settings saved')}>Save changes</Button>
+        </div>
+      </>
+    )
+  }
+  if (view === 'admin') {
+    return (
+      <>
+        <PageTitle kicker="ADMINISTRATION" title="Dashboard" sub="Here's a snapshot of platform activity."/>
+        <div className="metricGrid">{
+          [
+            ['2,418', 'Registered users', '+8.2%'],
+            ['48', 'Published games', '+3'],
+            ['12', 'Open tickets', '4 urgent'],
+            ['91%', 'Resolved this week', '+6.4%'],
+          ].map((x, i) => (
+            <article key={i}><span><Icon name={['user', 'game', 'chat', 'shield'][i]}/></span><small>{x[1]}</small><b>{x[0]}</b><i>{x[2]}</i></article>
+          ))
+        }</div>
+        <Button onClick={() => go('home')}>Back to home</Button>
+      </>
+    )
+  }
+  return (
+    <>
+      <PageTitle kicker="PLAYER SPACE" title={view} sub="Content for this section."/>
+      <Button onClick={() => go('dashboard')}>Back to dashboard</Button>
+    </>\n  )
+}
+
+function GameForm({ game, close, save }: { game?: DemoGame; close: () => void; save: (g: DemoGame) => void }) {
+  const [preview, setPreview] = useState(game?.image || photos[0])
+  return (
+    <form className="gameForm" onSubmit={e => { e.preventDefault(); const d = new FormData(e.currentTarget); save({ id: game?.id || Date.now(), title: String(d.get('title')), category: String(d.get('category')), status: String(d.get('status')), visible: d.get('visible') === 'on', image: preview }) }}>
+      <div className="uploadPreview"><img src={preview} alt="Cover"/><label>Upload cover<input type="file" accept="image/*" onChange={e => { const f = e.target.files?.[0]; if (f) setPreview(URL.createObjectURL(f)) }}/></label></div>
+      <label>Game title<input name="title" required defaultValue={game?.title}/></label>
+      <div className="dialogActions"><Button secondary onClick={close}>Cancel</Button><Button>{game ? 'Save changes' : 'Create game'}</Button></div>
+    </form>
+  )
+}
+
+export default function App() {
+  const [view, setView] = useState<View>('home')
+  const [auth, setAuth] = useState<Auth>(null)
+  const { signOut } = useAuth()
+  const go = (v: View) => { setView(v); window.scrollTo(0, 0) }
+  const enter = async () => { setAuth(null); go('dashboard') }
+  const handleLogout = async () => { await signOut(); go('home') }
+  return (
+    <AuthProvider>
+      <>
+        {view === 'home' ? <Home go={go} auth={setAuth} /> : view === 'games' ? <Dashboard view="games" go={go} logout={handleLogout} /> : <Dashboard view={view} go={go} logout={handleLogout} />}
+        {auth && <AuthModal mode={auth} setMode={setAuth} enter={enter} />}
+      </>
+    </AuthProvider>
+  )
+}
+
+  )
+}
+
+
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>
+}
+
+const Logo = () => <button className="logo" onClick={() => location.reload()}><span className="logoMark"><Icon name="play" size={15}/></span><span>playwith<b>nicole</b></span></button>
+const Button = ({ children, secondary = false, onClick, disabled = false }: { children: React.ReactNode; secondary?: boolean; onClick?: () => void; disabled?: boolean }) =>
+  <button className={`btn ${secondary ? 'secondary' : ''}`} onClick={onClick} disabled={disabled}>{children}</button>

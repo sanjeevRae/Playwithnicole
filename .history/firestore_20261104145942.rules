@@ -1,0 +1,333 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ==========================================
+    // AUTHENTICATION HELPERS
+    // ==========================================
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn()
+        && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && exists(
+          /databases/$(database)/documents/users/$(request.auth.uid)
+        )
+        && get(
+          /databases/$(database)/documents/users/$(request.auth.uid)
+        ).data.role == 'admin';
+    }
+
+
+    // ==========================================
+    // USERS
+    // ==========================================
+
+    match /users/{userId} {
+
+      // A user can read their own profile.
+      // Admins can read member profiles for Chat Management.
+      allow get, list: if isOwner(userId) || isAdmin();
+
+      // Users cannot create their own admin role.
+      allow create: if isOwner(userId)
+        && (
+          !request.resource.data.keys().hasAny(['role'])
+          || request.resource.data.role != 'admin'
+        );
+
+      // Admins can manage profiles.
+      // Users cannot change their own role.
+      allow update: if isAdmin()
+        || (
+          isOwner(userId)
+          && !request.resource.data
+            .diff(resource.data)
+            .affectedKeys()
+            .hasAny(['role'])
+        );
+
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+
+    // ==========================================
+    // PRIVATE SUPPORT CONVERSATIONS
+    //
+    // Structure:
+    //
+    // supportConversations/{userUid}
+    //   messages/{messageId}
+    //
+    // Every member has one conversation.
+    // Users can access only their own conversation.
+    // Admins can access all conversations.
+    // ==========================================
+
+    match /supportConversations/{userId} {
+
+      // Admin can get any conversation.
+      // A user can get only their own conversation.
+      allow get: if isAdmin() || isOwner(userId);
+
+      // Only admins can list all conversations.
+      allow list: if isAdmin();
+
+
+      // ========================================
+      // CREATE A USER CONVERSATION
+      // ========================================
+
+      allow create: if isOwner(userId)
+
+        && request.resource.data.keys().hasAll([
+          'userId',
+          'status',
+          'lastMessage',
+          'lastMessageType',
+          'lastMessageSenderId',
+          'lastMessageAt',
+          'createdAt',
+          'updatedAt'
+        ])
+
+        && request.resource.data.keys().hasOnly([
+          'userId',
+          'status',
+          'lastMessage',
+          'lastMessageType',
+          'lastMessageSenderId',
+          'lastMessageAt',
+          'createdAt',
+          'updatedAt'
+        ])
+
+        && request.resource.data.userId == userId
+        && request.resource.data.status == 'open'
+        && request.resource.data.lastMessage is string
+        && request.resource.data.lastMessageSenderId == request.auth.uid
+        && request.resource.data.lastMessageType in ['text', 'image']
+        && request.resource.data.lastMessageAt == request.time
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+
+      // ========================================
+      // UPDATE A CONVERSATION
+      // ========================================
+
+      allow update: if
+
+        request.resource.data.userId == userId
+
+        && request.resource.data.diff(resource.data)
+          .affectedKeys()
+          .hasOnly([
+            'status',
+            'lastMessage',
+            'lastMessageType',
+            'lastMessageSenderId',
+            'lastMessageAt',
+            'updatedAt'
+          ])
+
+        && request.resource.data.status in ['open', 'resolved']
+        && request.resource.data.updatedAt == request.time
+
+        && (
+
+          // Administrators can update conversation metadata
+          // and resolve/reopen conversations.
+          isAdmin()
+
+          ||
+
+          // A member can only update their own conversation
+          // as part of sending a new message.
+          (
+            isOwner(userId)
+            && request.resource.data.status == 'open'
+            && request.resource.data.lastMessageSenderId == request.auth.uid
+            && request.resource.data.lastMessageAt == request.time
+            && request.resource.data.lastMessage is string
+            && request.resource.data.lastMessageType in ['text', 'image']
+          )
+        );
+
+
+      // Conversations are not permanently deleted by clients.
+      allow delete: if false;
+
+
+      // ========================================
+      // MESSAGES INSIDE A SUPPORT CONVERSATION
+      // ========================================
+
+      match /messages/{messageId} {
+
+        // Only the conversation owner and admins can read messages.
+        allow get, list: if isAdmin() || isOwner(userId);
+
+
+        // Only two sender types are allowed:
+        //
+        // 1. The owner of this conversation, senderRole = user.
+        // 2. An administrator, senderRole = admin.
+        //
+        // This prevents one ordinary user from messaging
+        // another ordinary user.
+        allow create: if
+
+          request.resource.data.keys().hasAll([
+            'senderId',
+            'senderRole',
+            'type',
+            'text',
+            'imageUrl',
+            'createdAt'
+          ])
+
+          && request.resource.data.keys().hasOnly([
+            'senderId',
+            'senderRole',
+            'type',
+            'text',
+            'imageUrl',
+            'createdAt'
+          ])
+
+          && request.resource.data.createdAt == request.time
+
+          && request.resource.data.text is string
+          && request.resource.data.text.size() <= 4000
+
+          && request.resource.data.imageUrl is string
+
+          && request.resource.data.type in ['text', 'image']
+
+          && (
+
+            // User sends a message to their own support thread.
+            (
+              isOwner(userId)
+              && request.resource.data.senderId == request.auth.uid
+              && request.resource.data.senderRole == 'user'
+            )
+
+            ||
+
+            // Admin replies to the selected member's thread.
+            (
+              isAdmin()
+              && request.resource.data.senderId == request.auth.uid
+              && request.resource.data.senderRole == 'admin'
+            )
+
+          )
+
+          && (
+
+            // Text-only message.
+            (
+              request.resource.data.type == 'text'
+              && request.resource.data.text.size() > 0
+              && request.resource.data.imageUrl == ''
+            )
+
+            ||
+
+            // Image message. Cloudinary HTTPS URLs only.
+            (
+              request.resource.data.type == 'image'
+              && request.resource.data.imageUrl.matches(
+                'https://res\\.cloudinary\\.com/.+'
+              )
+            )
+
+          );
+
+
+        // Messages are immutable from the client.
+        allow update, delete: if false;
+      }
+    }
+
+
+    // ==========================================
+    // MEDIA
+    // ==========================================
+
+    match /media/{mediaId} {
+
+      allow read: if true;
+
+      allow create: if isSignedIn()
+        && request.auth.uid == request.resource.data.userId;
+
+      allow update: if isSignedIn()
+        && request.auth.uid == resource.data.userId
+        && request.resource.data.userId == resource.data.userId;
+
+      allow delete: if isSignedIn()
+        && request.auth.uid == resource.data.userId;
+    }
+
+
+    // ==========================================
+    // GAMES
+    // ==========================================
+
+    match /games/{gameId} {
+
+      // Admin can read all games.
+      // Public visitors can read published visible games.
+      allow read: if isAdmin()
+        || (
+          resource.data.status == 'Published'
+          && resource.data.visible == true
+        );
+
+      allow create, update, delete: if isAdmin();
+    }
+
+
+    // ==========================================
+    // HERO BANNERS
+    // ==========================================
+
+    match /heroBanners/{bannerId} {
+
+      // Admins can read all banners.
+      // Public visitors can read visible banners.
+      allow read: if isAdmin()
+        || resource.data.visible == true;
+
+      allow create, update, delete: if isAdmin();
+    }
+
+
+    // ==========================================
+    // SOCIAL LINKS SETTINGS
+    // ==========================================
+
+    match /siteSettings/{settingId} {
+
+      // Homepage visitors can read the social links document.
+      // Other settings are admin-only.
+      allow read: if isAdmin()
+        || settingId == 'socialLinks';
+
+      // Only administrators can change site settings.
+      allow create, update, delete: if isAdmin();
+    }
+
+  }
+}

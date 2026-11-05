@@ -1,0 +1,414 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ==========================================
+    // AUTHENTICATION HELPERS
+    // ==========================================
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() &&
+        request.auth.uid == userId;
+    }
+
+    function userDocumentExists() {
+      return isSignedIn() &&
+        exists(
+          /databases/$(database)/documents/users/$(request.auth.uid)
+        );
+    }
+
+    function isAdmin() {
+      return userDocumentExists() &&
+        get(
+          /databases/$(database)/documents/users/$(request.auth.uid)
+        ).data.role == 'admin';
+    }
+
+    // ==========================================
+    // USER PROFILE SECURITY
+    // ==========================================
+
+    function safeInitialUserRole() {
+      return !('role' in request.resource.data) ||
+        request.resource.data.role in [
+          'member',
+          'player',
+          'user'
+        ];
+    }
+
+    function safeInitialAdminFlag() {
+      return !('isAdmin' in request.resource.data) ||
+        request.resource.data.isAdmin == false;
+    }
+
+    function safeInitialAdminRoleFlag() {
+      return !('admin' in request.resource.data) ||
+        request.resource.data.admin == false;
+    }
+
+    function validUserProfileUpdate() {
+      return request.resource.data
+        .diff(resource.data)
+        .affectedKeys()
+        .hasOnly([
+          'displayName',
+          'name',
+          'username',
+          'bio',
+          'photoURL',
+          'updatedAt'
+        ]);
+    }
+
+    match /users/{userId} {
+
+      // Users can read their own profiles.
+      // Admins can read all profiles.
+      allow read: if isOwner(userId) || isAdmin();
+
+      // New users can create their own profile,
+      // but cannot assign themselves an admin role.
+      allow create: if isOwner(userId) &&
+        safeInitialUserRole() &&
+        safeInitialAdminFlag() &&
+        safeInitialAdminRoleFlag();
+
+      // Users can update permitted profile fields.
+      // Only admins can change roles and verification fields.
+      allow update: if (
+        isOwner(userId) &&
+        validUserProfileUpdate()
+      ) || isAdmin();
+
+      // Only admins can delete user profile documents.
+      allow delete: if isAdmin();
+
+      // ==========================================
+      // USER FAVORITES
+      // Path: users/{userId}/favorites/{gameId}
+      // ==========================================
+
+      match /favorites/{gameId} {
+
+        allow read: if isOwner(userId) || isAdmin();
+
+        function validFavorite() {
+          return request.resource.data.keys().hasAll([
+              'gameId',
+              'title',
+              'description',
+              'image',
+              'categories',
+              'favoritedAt',
+              'updatedAt'
+            ]) &&
+            request.resource.data.keys().hasOnly([
+              'gameId',
+              'title',
+              'description',
+              'image',
+              'categories',
+              'favoritedAt',
+              'updatedAt'
+            ]) &&
+            request.resource.data.gameId == gameId &&
+            request.resource.data.title is string &&
+            request.resource.data.description is string &&
+            request.resource.data.image is string &&
+            request.resource.data.categories is list &&
+            request.resource.data.favoritedAt is timestamp &&
+            request.resource.data.updatedAt is timestamp &&
+            request.resource.data.title.size() <= 200 &&
+            request.resource.data.description.size() <= 5000 &&
+            request.resource.data.categories.size() <= 30;
+        }
+
+        allow create, update: if isOwner(userId) &&
+          validFavorite();
+
+        allow delete: if isOwner(userId);
+      }
+
+      // ==========================================
+      // USER RECENT GAMES
+      // Path: users/{userId}/recentGames/{gameId}
+      // ==========================================
+
+      match /recentGames/{gameId} {
+
+        allow read: if isOwner(userId) || isAdmin();
+
+        function validRecentGame() {
+          return request.resource.data.keys().hasAll([
+              'gameId',
+              'title',
+              'description',
+              'image',
+              'categories',
+              'openedAt',
+              'updatedAt'
+            ]) &&
+            request.resource.data.keys().hasOnly([
+              'gameId',
+              'title',
+              'description',
+              'image',
+              'categories',
+              'openedAt',
+              'updatedAt',
+              'playedAt'
+            ]) &&
+            request.resource.data.gameId == gameId &&
+            request.resource.data.title is string &&
+            request.resource.data.description is string &&
+            request.resource.data.image is string &&
+            request.resource.data.categories is list &&
+            request.resource.data.openedAt is timestamp &&
+            request.resource.data.updatedAt is timestamp &&
+            request.resource.data.title.size() <= 200 &&
+            request.resource.data.description.size() <= 5000 &&
+            request.resource.data.categories.size() <= 30 &&
+            (
+              !('playedAt' in request.resource.data) ||
+              request.resource.data.playedAt is timestamp
+            );
+        }
+
+        allow create, update: if isOwner(userId) &&
+          validRecentGame();
+
+        allow delete: if isOwner(userId);
+      }
+    }
+
+    // ==========================================
+    // GAME MANAGEMENT
+    // Collection: games
+    // ==========================================
+
+    match /games/{gameId} {
+
+      // Admins can read every game, including drafts.
+      // Members can only read published and visible games.
+      allow read: if isAdmin() ||
+        (
+          resource.data.status == 'Published' &&
+          resource.data.visible == true
+        );
+
+      // Only admins can create games.
+      allow create: if isAdmin();
+
+      // Only admins can edit games.
+      allow update: if isAdmin();
+
+      // Only admins can delete games.
+      allow delete: if isAdmin();
+    }
+
+    // ==========================================
+    // SOCIAL LINKS
+    // Document: siteSettings/socialLinks
+    // ==========================================
+
+    match /siteSettings/{settingId} {
+
+      // Public users can read only socialLinks.
+      // Admins can read all site settings.
+      allow read: if settingId == 'socialLinks' ||
+        isAdmin();
+
+      // Only admins can modify settings.
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ==========================================
+    // HERO BANNERS
+    // Collection: heroBanners
+    // ==========================================
+
+    match /heroBanners/{bannerId} {
+
+      // Public users can only read active and visible banners.
+      // Admins can read all banners.
+      allow read: if isAdmin() ||
+        (
+          resource.data.visible == true &&
+          resource.data.isActive == true
+        );
+
+      // Only admins can manage banners.
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ==========================================
+    // SUPPORT CONVERSATIONS
+    // Collection: supportConversations
+    // ==========================================
+
+    function validUserConversationCreate(userId) {
+      return request.resource.data.keys().hasAll([
+          'userId',
+          'status',
+          'lastMessage',
+          'lastMessageType',
+          'lastMessageSenderId',
+          'lastMessageAt',
+          'updatedAt',
+          'createdAt'
+        ]) &&
+        request.resource.data.keys().hasOnly([
+          'userId',
+          'status',
+          'lastMessage',
+          'lastMessageType',
+          'lastMessageSenderId',
+          'lastMessageAt',
+          'updatedAt',
+          'createdAt'
+        ]) &&
+        request.resource.data.userId == userId &&
+        request.resource.data.status == 'open' &&
+        request.resource.data.lastMessage is string &&
+        request.resource.data.lastMessageType in [
+          'text',
+          'image'
+        ] &&
+        request.resource.data.lastMessageSenderId ==
+          request.auth.uid &&
+        request.resource.data.lastMessageAt is timestamp &&
+        request.resource.data.updatedAt is timestamp &&
+        request.resource.data.createdAt is timestamp;
+    }
+
+    function validUserConversationUpdate(userId) {
+      return request.resource.data.userId == userId &&
+        request.resource.data.status == 'open' &&
+        request.resource.data.lastMessage is string &&
+        request.resource.data.lastMessageType in [
+          'text',
+          'image'
+        ] &&
+        request.resource.data.lastMessageSenderId ==
+          request.auth.uid &&
+        request.resource.data.lastMessageAt is timestamp &&
+        request.resource.data.updatedAt is timestamp &&
+        request.resource.data
+          .diff(resource.data)
+          .affectedKeys()
+          .hasOnly([
+            'status',
+            'lastMessage',
+            'lastMessageType',
+            'lastMessageSenderId',
+            'lastMessageAt',
+            'updatedAt'
+          ]);
+    }
+
+    match /supportConversations/{userId} {
+
+      // Conversation owner and admins can read the conversation.
+      allow read: if isOwner(userId) || isAdmin();
+
+      // Users can create their own conversation.
+      allow create: if isOwner(userId) &&
+        validUserConversationCreate(userId);
+
+      // Users can send messages and reopen resolved conversations.
+      // Admins can manage conversation status and metadata.
+      allow update: if (
+        isOwner(userId) &&
+        validUserConversationUpdate(userId)
+      ) || (
+        isAdmin() &&
+        request.resource.data.userId == userId
+      );
+
+      // Only admins can delete conversations.
+      allow delete: if isAdmin();
+
+      // ==========================================
+      // SUPPORT MESSAGES
+      // Path:
+      // supportConversations/{userId}/messages/{messageId}
+      // ==========================================
+
+      match /messages/{messageId} {
+
+        // Only the conversation owner and admins can read.
+        allow read: if isOwner(userId) || isAdmin();
+
+        function validMessage() {
+          return request.resource.data.keys().hasAll([
+              'senderId',
+              'senderRole',
+              'type',
+              'text',
+              'imageUrl',
+              'createdAt'
+            ]) &&
+            request.resource.data.keys().hasOnly([
+              'senderId',
+              'senderRole',
+              'type',
+              'text',
+              'imageUrl',
+              'createdAt'
+            ]) &&
+            request.resource.data.senderId ==
+              request.auth.uid &&
+            request.resource.data.senderRole in [
+              'user',
+              'admin'
+            ] &&
+            request.resource.data.type in [
+              'text',
+              'image'
+            ] &&
+            request.resource.data.text is string &&
+            request.resource.data.imageUrl is string &&
+            request.resource.data.text.size() <= 4000 &&
+            request.resource.data.createdAt is timestamp;
+        }
+
+        // A user can only send a message as themselves.
+        allow create: if isOwner(userId) &&
+          validMessage() &&
+          request.resource.data.senderRole == 'user' &&
+          existsAfter(
+            /databases/$(database)/documents/supportConversations/$(userId)
+          );
+
+        // An administrator can send a reply as an admin.
+        allow create: if isAdmin() &&
+          validMessage() &&
+          request.resource.data.senderRole == 'admin' &&
+          existsAfter(
+            /databases/$(database)/documents/supportConversations/$(userId)
+          );
+
+        // Messages are immutable after creation.
+        allow update, delete: if false;
+      }
+    }
+
+    // ==========================================
+    // DEFAULT DENY
+    // ==========================================
+
+    // Any collection or document not explicitly
+    // permitted above is inaccessible.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

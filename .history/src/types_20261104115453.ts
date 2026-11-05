@@ -1,0 +1,17 @@
+export type View =
+  | 'home'
+  | 'games'
+  | 'dashboard'
+  | 'messages'
+  | 'social'
+  | 'profile'
+  | 'settings'
+  | 'notifications'
+  | 'admin'
+  | 'users'
+  | 'manage-games'
+  | 'manage-hero'
+  | 'admin-messages'
+  | 'social-links'
+
+export type Auth = null | 'login' | 'signup' | 'forgot' | 'verify'

@@ -1,0 +1,428 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ==========================================
+    // AUTHENTICATION HELPERS
+    // ==========================================
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() &&
+        request.auth.uid == userId;
+    }
+
+    function userDocumentExists() {
+      return isSignedIn() &&
+        exists(
+          /databases/$(database)/documents/users/$(request.auth.uid)
+        );
+    }
+
+    function isAdmin() {
+      return userDocumentExists() &&
+        get(
+          /databases/$(database)/documents/users/$(request.auth.uid)
+        ).data.role == 'admin';
+    }
+
+    // ==========================================
+    // USER PROFILE HELPERS
+    // ==========================================
+
+    function safeInitialUserRole() {
+      return !('role' in request.resource.data) ||
+        request.resource.data.role in [
+          'member',
+          'player',
+          'user'
+        ];
+    }
+
+    function safeInitialAdminFlag() {
+      return !('isAdmin' in request.resource.data) ||
+        request.resource.data.isAdmin == false;
+    }
+
+    function safeInitialAdminRoleFlag() {
+      return !('admin' in request.resource.data) ||
+        request.resource.data.admin == false;
+    }
+
+    function safeInitialVerification() {
+      return !('verified' in request.resource.data) ||
+        request.resource.data.verified == false;
+    }
+
+    function validUserProfileUpdate() {
+      return request.resource.data
+        .diff(resource.data)
+        .affectedKeys()
+        .hasOnly([
+          'displayName',
+          'name',
+          'username',
+          'bio',
+          'photoURL',
+          'updatedAt'
+        ]);
+    }
+
+    // ==========================================
+    // USER PROFILES
+    // Path: users/{userId}
+    // ==========================================
+
+    match /users/{userId} {
+
+      // Users can read their own profiles.
+      // Admins can read all profiles.
+      allow read: if isOwner(userId) || isAdmin();
+
+      // Users can create their own normal profile.
+      // Admins can create profiles and assign roles.
+      allow create: if isAdmin() || (
+        isOwner(userId) &&
+        safeInitialUserRole() &&
+        safeInitialAdminFlag() &&
+        safeInitialAdminRoleFlag() &&
+        safeInitialVerification()
+      );
+
+      // Users can update only their profile fields.
+      // Admins can update user roles and verification.
+      allow update: if (
+        isOwner(userId) &&
+        validUserProfileUpdate()
+      ) || isAdmin();
+
+      // Only admins can delete user profiles.
+      allow delete: if isAdmin();
+
+      // ==========================================
+      // FAVORITE GAMES
+      // Path: users/{userId}/favorites/{gameId}
+      // ==========================================
+
+      match /favorites/{gameId} {
+
+        allow read: if isOwner(userId) || isAdmin();
+
+        function validFavorite() {
+          return request.resource.data.keys().hasAll([
+              'gameId',
+              'title',
+              'description',
+              'image',
+              'categories',
+              'favoritedAt',
+              'updatedAt'
+            ]) &&
+            request.resource.data.keys().hasOnly([
+              'gameId',
+              'title',
+              'description',
+              'image',
+              'categories',
+              'favoritedAt',
+              'updatedAt'
+            ]) &&
+            request.resource.data.gameId == gameId &&
+            request.resource.data.title is string &&
+            request.resource.data.description is string &&
+            request.resource.data.image is string &&
+            request.resource.data.categories is list &&
+            request.resource.data.favoritedAt is timestamp &&
+            request.resource.data.updatedAt is timestamp &&
+            request.resource.data.title.size() <= 200 &&
+            request.resource.data.description.size() <= 5000 &&
+            request.resource.data.categories.size() <= 30;
+        }
+
+        allow create, update: if isOwner(userId) &&
+          validFavorite();
+
+        allow delete: if isOwner(userId);
+      }
+
+      // ==========================================
+      // RECENTLY PLAYED GAMES
+      // Path: users/{userId}/recentGames/{gameId}
+      // ==========================================
+
+      match /recentGames/{gameId} {
+
+        allow read: if isOwner(userId) || isAdmin();
+
+        function validRecentGame() {
+          return request.resource.data.keys().hasAll([
+              'gameId',
+              'title',
+              'description',
+              'image',
+              'categories',
+              'openedAt',
+              'updatedAt'
+            ]) &&
+            request.resource.data.keys().hasOnly([
+              'gameId',
+              'title',
+              'description',
+              'image',
+              'categories',
+              'openedAt',
+              'updatedAt',
+              'playedAt'
+            ]) &&
+            request.resource.data.gameId == gameId &&
+            request.resource.data.title is string &&
+            request.resource.data.description is string &&
+            request.resource.data.image is string &&
+            request.resource.data.categories is list &&
+            request.resource.data.openedAt is timestamp &&
+            request.resource.data.updatedAt is timestamp &&
+            request.resource.data.title.size() <= 200 &&
+            request.resource.data.description.size() <= 5000 &&
+            request.resource.data.categories.size() <= 30 &&
+            (
+              !('playedAt' in request.resource.data) ||
+              request.resource.data.playedAt is timestamp
+            );
+        }
+
+        allow create, update: if isOwner(userId) &&
+          validRecentGame();
+
+        allow delete: if isOwner(userId);
+      }
+    }
+
+    // ==========================================
+    // GAMES
+    // Collection: games
+    // ==========================================
+
+    match /games/{gameId} {
+
+      // Admins can read all games, including drafts.
+      // Normal users can read published and visible games.
+      allow read: if isAdmin() ||
+        (
+          resource.data.status == 'Published' &&
+          resource.data.visible == true
+        );
+
+      // Only admins can manage games.
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ==========================================
+    // SOCIAL LINKS
+    // Document: siteSettings/socialLinks
+    // ==========================================
+
+    match /siteSettings/{settingId} {
+
+      // This is the important permission for your
+      // homepage and Social Connections page.
+      //
+      // Anyone can read socialLinks without signing in.
+      // Only admins can read other settings.
+      allow read: if settingId == 'socialLinks' ||
+        isAdmin();
+
+      // Only admins can create, update, or delete settings.
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ==========================================
+    // HERO BANNERS
+    // Collection: heroBanners
+    // ==========================================
+
+    match /heroBanners/{bannerId} {
+
+      // Public users can only read active, visible banners.
+      // Admins can read all banners.
+      allow read: if isAdmin() ||
+        (
+          resource.data.visible == true &&
+          resource.data.isActive == true
+        );
+
+      // Only admins can manage hero banners.
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ==========================================
+    // SUPPORT CONVERSATION HELPERS
+    // ==========================================
+
+    function validUserConversationCreate(userId) {
+      return request.resource.data.keys().hasAll([
+          'userId',
+          'status',
+          'lastMessage',
+          'lastMessageType',
+          'lastMessageSenderId',
+          'lastMessageAt',
+          'updatedAt',
+          'createdAt'
+        ]) &&
+        request.resource.data.keys().hasOnly([
+          'userId',
+          'status',
+          'lastMessage',
+          'lastMessageType',
+          'lastMessageSenderId',
+          'lastMessageAt',
+          'updatedAt',
+          'createdAt'
+        ]) &&
+        request.resource.data.userId == userId &&
+        request.resource.data.status == 'open' &&
+        request.resource.data.lastMessage is string &&
+        request.resource.data.lastMessageType in [
+          'text',
+          'image'
+        ] &&
+        request.resource.data.lastMessageSenderId ==
+          request.auth.uid &&
+        request.resource.data.lastMessageAt is timestamp &&
+        request.resource.data.updatedAt is timestamp &&
+        request.resource.data.createdAt is timestamp;
+    }
+
+    function validUserConversationUpdate(userId) {
+      return request.resource.data.userId == userId &&
+        request.resource.data.status == 'open' &&
+        request.resource.data.lastMessage is string &&
+        request.resource.data.lastMessageType in [
+          'text',
+          'image'
+        ] &&
+        request.resource.data.lastMessageSenderId ==
+          request.auth.uid &&
+        request.resource.data.lastMessageAt is timestamp &&
+        request.resource.data.updatedAt is timestamp &&
+        request.resource.data
+          .diff(resource.data)
+          .affectedKeys()
+          .hasOnly([
+            'status',
+            'lastMessage',
+            'lastMessageType',
+            'lastMessageSenderId',
+            'lastMessageAt',
+            'updatedAt'
+          ]);
+    }
+
+    // ==========================================
+    // SUPPORT CONVERSATIONS
+    // Path: supportConversations/{userId}
+    // ==========================================
+
+    match /supportConversations/{userId} {
+
+      // Users can access only their own conversation.
+      // Admins can access all support conversations.
+      allow read: if isOwner(userId) || isAdmin();
+
+      // Users can create their own conversation.
+      allow create: if isOwner(userId) &&
+        validUserConversationCreate(userId);
+
+      // Users can send a message and reopen a resolved chat.
+      // Admins can update conversation status and metadata.
+      allow update: if (
+        isOwner(userId) &&
+        validUserConversationUpdate(userId)
+      ) || (
+        isAdmin() &&
+        request.resource.data.userId == userId
+      );
+
+      // Only admins can delete support conversations.
+      allow delete: if isAdmin();
+
+      // ==========================================
+      // SUPPORT MESSAGES
+      // Path:
+      // supportConversations/{userId}/messages/{messageId}
+      // ==========================================
+
+      match /messages/{messageId} {
+
+        // Only the conversation owner and admins can read.
+        allow read: if isOwner(userId) || isAdmin();
+
+        function validMessage() {
+          return request.resource.data.keys().hasAll([
+              'senderId',
+              'senderRole',
+              'type',
+              'text',
+              'imageUrl',
+              'createdAt'
+            ]) &&
+            request.resource.data.keys().hasOnly([
+              'senderId',
+              'senderRole',
+              'type',
+              'text',
+              'imageUrl',
+              'createdAt'
+            ]) &&
+            request.resource.data.senderId ==
+              request.auth.uid &&
+            request.resource.data.senderRole in [
+              'user',
+              'admin'
+            ] &&
+            request.resource.data.type in [
+              'text',
+              'image'
+            ] &&
+            request.resource.data.text is string &&
+            request.resource.data.imageUrl is string &&
+            request.resource.data.text.size() <= 4000 &&
+            request.resource.data.createdAt is timestamp;
+        }
+
+        // Normal users can only send messages as themselves.
+        allow create: if isOwner(userId) &&
+          validMessage() &&
+          request.resource.data.senderRole == 'user' &&
+          existsAfter(
+            /databases/$(database)/documents/supportConversations/$(userId)
+          );
+
+        // Admins can reply as the Support Team.
+        allow create: if isAdmin() &&
+          validMessage() &&
+          request.resource.data.senderRole == 'admin' &&
+          existsAfter(
+            /databases/$(database)/documents/supportConversations/$(userId)
+          );
+
+        // Messages cannot be edited or deleted by clients.
+        allow update, delete: if false;
+      }
+    }
+
+    // ==========================================
+    // DEFAULT DENY
+    // ==========================================
+
+    // Everything not explicitly allowed above is denied.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

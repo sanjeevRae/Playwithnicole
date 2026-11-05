@@ -1,0 +1,131 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ==========================================
+    // HELPER FUNCTIONS
+    // ==========================================
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Administrator role is verified using the user's
+    // Firestore profile, not a value supplied by the client.
+    function isAdmin() {
+      return isSignedIn()
+        && exists(
+          /databases/$(database)/documents/users/$(request.auth.uid)
+        )
+        && get(
+          /databases/$(database)/documents/users/$(request.auth.uid)
+        ).data.role == 'admin';
+    }
+
+
+    // ==========================================
+    // USERS COLLECTION
+    // ==========================================
+
+    match /users/{userId} {
+
+      // Users can read their own profile.
+      // Administrators can read all user profiles.
+      allow read: if isOwner(userId) || isAdmin();
+
+      // Users can create their own profile,
+      // but cannot assign themselves admin privileges.
+      allow create: if isOwner(userId)
+        && (
+          !request.resource.data.keys().hasAny(['role'])
+          || request.resource.data.role != 'admin'
+        );
+
+      // Administrators can manage user profiles.
+      // Ordinary users can update their own profile,
+      // but cannot change their role.
+      allow update: if isAdmin()
+        || (
+          isOwner(userId)
+          && !request.resource.data.diff(resource.data)
+            .affectedKeys()
+            .hasAny(['role'])
+        );
+
+      // Users can delete their own profile.
+      // Administrators can delete any user profile.
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+
+    // ==========================================
+    // MEDIA COLLECTION
+    // ==========================================
+
+    match /media/{mediaId} {
+
+      // Preserve public media metadata reading.
+      allow read: if true;
+
+      // Only authenticated owners can create media metadata.
+      allow create: if isSignedIn()
+        && request.auth.uid == request.resource.data.userId;
+
+      // Owners can update their metadata,
+      // but cannot transfer ownership.
+      allow update: if isSignedIn()
+        && request.auth.uid == resource.data.userId
+        && request.resource.data.userId == resource.data.userId;
+
+      // Only the original owner can delete metadata.
+      allow delete: if isSignedIn()
+        && request.auth.uid == resource.data.userId;
+    }
+
+
+    // ==========================================
+    // GAMES COLLECTION
+    // ==========================================
+
+    match /games/{gameId} {
+
+      // Administrators can see every game.
+      // Public visitors can only see published,
+      // visible games.
+      allow read: if isAdmin()
+        || (
+          resource.data.status == 'Published'
+          && resource.data.visible == true
+        );
+
+      // Only administrators can create games.
+      allow create: if isAdmin();
+
+      // Only administrators can edit games.
+      // Includes editing, hiding, publishing and archiving.
+      allow update: if isAdmin();
+
+      // Only administrators can delete games.
+      allow delete: if isAdmin();
+    }
+
+    Add this match block inside your existing:
+match /databases/{database}/documents {
+
+match /heroBanners/{bannerId} {
+  // Administrators can read the banner even when it is hidden.
+  // Public visitors can read only a visible banner.
+  allow read: if isAdmin() || resource.data.visible == true;
+
+  // Only administrators can create, update (including show/hide), or delete it.
+  allow create, update, delete: if isAdmin();
+}
+  }
+}
+
