@@ -1154,6 +1154,15 @@ function Home({
   ) => {
     const destination = target.trim()
 
+    // The public Explore games CTA is a protected destination.
+    // Guests are sent through the same login modal used by the
+    // existing #login hero action. AuthModal.enter() then opens
+    // the dashboard after a successful sign-in.
+    if (fallback === 'games' && !user) {
+      auth('login')
+      return
+    }
+
     if (!destination || destination === '#games') {
       go('games')
       return
@@ -1191,6 +1200,18 @@ function Home({
     } else {
       go('games')
     }
+  }
+
+  // Footer destinations require an account. Guests see the login
+  // modal; the existing AuthModal enter handler takes them to dashboard.
+  // Signed-in users can navigate directly to the requested dashboard view.
+  const handleFooterNavigation = (destination: View) => {
+    if (!user) {
+      auth('login')
+      return
+    }
+
+    go(destination)
   }
 
   return (
@@ -1331,7 +1352,7 @@ function Home({
           </div>
 
           <div className="scroll">
-            SCROLL TO EXPLORE <span>↓</span>
+            SCROLL TO EXPLORE <span>→</span>
           </div>
         </section>
 
@@ -1636,9 +1657,57 @@ function Home({
 
         <div>
           <b>Explore</b>
-          <span>Games</span>
-          <span>Community</span>
-          <span>Updates</span>
+          <a
+            className="footerLink"
+            onClick={() => {
+              if (user) go('dashboard')
+              else window.scrollTo({ top: 0, behavior: 'smooth' })
+            }}
+          >
+            Home
+          </a>
+          <a
+            className="footerLink"
+            role="button"
+            tabIndex={0}
+            onClick={() => handleFooterNavigation('games')}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                handleFooterNavigation('games')
+              }
+            }}
+          >
+            Games
+          </a>
+          <a
+            className="footerLink"
+            role="button"
+            tabIndex={0}
+            onClick={() => handleFooterNavigation('social')}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                handleFooterNavigation('social')
+              }
+            }}
+          >
+            Community
+          </a>
+          <a
+            className="footerLink"
+            role="button"
+            tabIndex={0}
+            onClick={() => handleFooterNavigation('notifications')}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                handleFooterNavigation('notifications')
+              }
+            }}
+          >
+            Updates
+          </a>
         </div>
 
         <div>
@@ -1817,7 +1886,6 @@ function AuthModal({
                   setMfaCode('')
                 }}
               >
-                Cancel and return to login
               </button>
             </form>
           ) : mode === 'verify' ? (

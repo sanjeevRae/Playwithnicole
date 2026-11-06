@@ -294,7 +294,7 @@ a { color: inherit; }
   display: flex;
   align-items: center;
   gap: 12px;
-  color: #8c899d;
+  color: #fcfcfc;
   font-size: 9px;
   letter-spacing: .2em;
   writing-mode: vertical-rl;
@@ -634,6 +634,13 @@ footer a {
 
 footer a:hover { color: #fff; }
 
+.footerLink {
+  display: inline-block;
+  margin: 4px 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
 /* Homepage social links */
 
 .homeSocial {
@@ -696,7 +703,7 @@ footer a:hover { color: #fff; }
   font-size: 9px;
 }
 
-.homeSocialGrid > a > svg { color: #777389; }
+.homeSocialGrid > a > svg { color: #f2f8ff; }
 
 .externalNote {
   display: flex;
@@ -704,7 +711,7 @@ footer a:hover { color: #fff; }
   justify-content: center;
   gap: 7px;
   margin-top: 20px;
-  color: #747184;
+  color: #c4bbbb;
   font-size: 9px;
 }
 
