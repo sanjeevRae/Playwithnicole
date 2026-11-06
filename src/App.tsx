@@ -909,7 +909,7 @@ export const Logo = () => (
     type="button"
   >
     <span className="logoMark">
-      <Icon name="play" size={15} />
+      <img src="/logo.png" alt="Logo" style={{ width: 24, height: 24, objectFit: "contain" }} />
     </span>
     <span>
       playwith<b>nicole</b>
@@ -3781,7 +3781,12 @@ function Settings({
   profile: boolean
   go: (v: View) => void
 }) {
-  const { user, profile } = useAuth()
+  const {
+    user,
+    profile,
+    emailVerified,
+    refreshEmailVerification: syncEmailVerification,
+  } = useAuth()
 
   const [saved, setSaved] = useState('')
   const [saveError, setSaveError] = useState('')
@@ -4369,15 +4374,15 @@ function Settings({
     }
   }
 
-  const refreshEmailVerification = async () => {
+  const refreshEmailVerificationStatus = async () => {
     if (!auth.currentUser) return
     setSecurityBusy(true)
     setSecurityError('')
     try {
-      await reload(auth.currentUser)
+      const isVerified = await syncEmailVerification()
       setMfaRevision((value) => value + 1)
-      setSecurityMessage(auth.currentUser.emailVerified
-        ? 'Your email address is verified. You can now enable authenticator-based MFA.'
+      setSecurityMessage(isVerified
+        ? 'Your email address is verified and your profile has been synchronized. You can now enable authenticator-based MFA.'
         : 'Firebase still reports this email as unverified. Open the latest verification email and try again.')
     } catch (error) {
       setSecurityError(error instanceof Error ? error.message : 'Could not refresh your email verification status.')
@@ -4391,7 +4396,9 @@ function Settings({
     setSecurityBusy(true)
     setSecurityError('')
     try {
-      await sendEmailVerification(auth.currentUser)
+      await sendEmailVerification(auth.currentUser, {
+        url: `${window.location.origin}/?emailVerified=1`,
+      })
       setSecurityMessage('A verification link has been sent to your email address.')
     } catch (error) {
       setSecurityError(error instanceof Error ? error.message : 'Could not send the verification email.')
@@ -4696,6 +4703,18 @@ function Settings({
                 {verified ? 'Verified' : 'Unverified'}
               </strong>
 
+              <hr />
+
+              <small>Email address verification</small>
+              <strong className={emailVerified ? 'profileStatusText verified' : 'profileStatusText unverified'}>
+                {emailVerified ? 'Email verified' : 'Email not verified'}
+              </strong>
+              <small>
+                {emailVerified
+                  ? 'Firebase has confirmed ownership of this email address.'
+                  : 'Verify your email address to confirm ownership.'}
+              </small>
+
               <small>
                 Member since{' '}
                 {formatDate(profile?.createdAt) ||
@@ -4925,7 +4944,7 @@ function Settings({
               {securityError && <p className="securityError"><Icon name="alert-circle" size={15} /> {securityError}</p>}
             </div>
 
-            {!user?.emailVerified && (
+            {!emailVerified && (
               <div className="emailVerificationNotice">
                 <div>
                   <b>Email verification required for TOTP</b>
@@ -4935,7 +4954,7 @@ function Settings({
                   <button type="button" onClick={() => void sendVerificationEmail()} disabled={securityBusy}>
                     Send verification email
                   </button>
-                  <button type="button" onClick={() => void refreshEmailVerification()} disabled={securityBusy}>
+                  <button type="button" onClick={() => void refreshEmailVerificationStatus()} disabled={securityBusy}>
                     I've verified my email
                   </button>
                 </div>
@@ -5045,10 +5064,10 @@ function Settings({
                       <input type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} placeholder="Confirm your password" />
                     </label>
                   )}
-                  <Button type="button" disabled={securityBusy || !user?.emailVerified} onClick={() => void reauthenticateForAction('enroll')}>
+                  <Button type="button" disabled={securityBusy || !emailVerified} onClick={() => void reauthenticateForAction('enroll')}>
                     {securityBusy ? 'Preparing setup...' : 'Set up authenticator app'}
                   </Button>
-                  {!user?.emailVerified && <small className="helper">Verify your email address first to enable TOTP.</small>}
+                  {!emailVerified && <small className="helper">Verify your email address first to enable TOTP.</small>}
                 </div>
               )}
             </div>
@@ -5166,3 +5185,4 @@ export default function App() {
     </>
   )
 }
+

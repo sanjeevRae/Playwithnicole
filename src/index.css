@@ -106,8 +106,7 @@ a { color: inherit; }
   height: 31px;
   display: grid;
   place-items: center;
-  border-radius: 9px;
-  background: linear-gradient(135deg, var(--violet), var(--pink));
+  background: transparent;
   box-shadow: 0 0 28px rgba(139, 92, 246, .4);
 }
 
@@ -996,7 +995,6 @@ footer a:hover { color: #fff; }
   height: 26px;
   place-items: center;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--violet), var(--pink));
   font-size: 9px;
 }
 
@@ -2173,7 +2171,6 @@ footer a:hover { color: #fff; }
   place-items: center;
   overflow: visible;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--violet), var(--pink));
   font-weight: 700;
 }
 
@@ -2461,7 +2458,6 @@ footer a:hover { color: #fff; }
   justify-content: center;
   border: 0;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--violet), var(--pink));
   color: #fff;
   font-size: 12px;
   font-weight: 700;

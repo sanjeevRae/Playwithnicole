@@ -11,6 +11,7 @@ import {
   getMultiFactorResolver,
   GoogleAuthProvider,
   onAuthStateChanged,
+  reload,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut as firebaseSignOut,
@@ -26,6 +27,7 @@ import {
   onSnapshot,
   serverTimestamp,
   setDoc,
+  updateDoc,
   type DocumentData,
 } from 'firebase/firestore'
 import { auth, db } from '../firebase'
@@ -39,12 +41,14 @@ type UserProfile = DocumentData & {
   role: string
   createdAt: any
   updatedAt: any
+  emailVerified?: boolean
 }
 
 type AuthContextType = {
   user: User | null
   profile: UserProfile | null
   loading: boolean
+  emailVerified: boolean
   pendingMfaLabel: string
   signUp: (
     email: string,
@@ -57,10 +61,10 @@ type AuthContextType = {
   completeTotpSignIn: (code: string) => Promise<void>
   cancelMfaSignIn: () => void
   refreshProfile: () => Promise<void>
+  refreshEmailVerification: () => Promise<boolean>
   signOut: () => Promise<void>
   resetPassword: (email: string) => Promise<void>
 }
-
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 function isMfaRequiredError(error: unknown): error is MultiFactorError {
@@ -72,9 +76,45 @@ function isMfaRequiredError(error: unknown): error is MultiFactorError {
   )
 }
 
+/**
+ * Firebase Authentication is the source of truth for email verification.
+ * The Firestore emailVerified field is only a synchronized profile copy.
+ * The security rules independently require the email_verified token claim
+ * before an owner can change that field to true.
+ */
+async function syncEmailVerificationToFirestore(
+  firebaseUser: User,
+): Promise<boolean> {
+  await reload(firebaseUser)
+  const isEmailVerified = firebaseUser.emailVerified
+
+  // Force-refresh the ID token so Firestore Rules receive the latest
+  // email_verified claim after the user completes (or changes) verification.
+  await firebaseUser.getIdToken(true)
+
+  const userRef = doc(db, 'users', firebaseUser.uid)
+  const userSnapshot = await getDoc(userRef)
+
+  // The profile may not exist yet during the first moments of signup.
+  // saveProfile creates it, and the normal auth flow will sync again.
+  if (!userSnapshot.exists()) {
+    return isEmailVerified
+  }
+
+  if (userSnapshot.data().emailVerified !== isEmailVerified) {
+    await updateDoc(userRef, {
+      emailVerified: isEmailVerified,
+      updatedAt: serverTimestamp(),
+    })
+  }
+
+  return isEmailVerified
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [emailVerified, setEmailVerified] = useState(false)
   const [loading, setLoading] = useState(true)
   const [pendingResolver, setPendingResolver] =
     useState<MultiFactorResolver | null>(null)
@@ -100,6 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       unsubscribeProfile?.()
       unsubscribeProfile = undefined
       setUser(firebaseUser)
+      setEmailVerified(firebaseUser?.emailVerified ?? false)
 
       if (!firebaseUser) {
         setProfile(null)
@@ -168,6 +209,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           accountStateUnsubscribe()
           return
         }
+
+        // Keep the Firestore email verification mirror current on sign-in,
+        // including Google accounts and users returning after verifying.
+        try {
+          const isEmailVerified = await syncEmailVerificationToFirestore(firebaseUser)
+          if (active && generation === authGeneration) {
+            setEmailVerified(isEmailVerified)
+          }
+        } catch (verificationSyncError) {
+          console.warn('Could not synchronize email verification:', verificationSyncError)
+        }
+
+        if (!active || generation !== authGeneration) {
+          accountStateUnsubscribe()
+          return
+        }
+
         unsubscribeProfile = onSnapshot(
           userRef,
           (profileSnapshot) => {
@@ -215,6 +273,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       unsubscribeAccountState?.()
       unsubscribeProfile?.()
       unsubscribe()
+    }
+  }, [])
+
+  // The verification action usually opens in another browser tab. When the
+  // user returns to this tab, reload Firebase Auth and sync the profile.
+  useEffect(() => {
+    let active = true
+    let syncInProgress = false
+
+    const syncOnReturn = async () => {
+      if (document.visibilityState !== 'visible' || syncInProgress) return
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        if (active) setEmailVerified(false)
+        return
+      }
+
+      syncInProgress = true
+      try {
+        const isEmailVerified = await syncEmailVerificationToFirestore(currentUser)
+        if (active) setEmailVerified(isEmailVerified)
+      } catch (error) {
+        console.warn('Email verification refresh failed:', error)
+      } finally {
+        syncInProgress = false
+      }
+    }
+
+    window.addEventListener('focus', syncOnReturn)
+    document.addEventListener('visibilitychange', syncOnReturn)
+
+    return () => {
+      active = false
+      window.removeEventListener('focus', syncOnReturn)
+      document.removeEventListener('visibilitychange', syncOnReturn)
     }
   }, [])
 
@@ -291,6 +384,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         photoURL: nextPhotoURL,
         username: nextUsername,
         role: nextRole,
+        emailVerified: false,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       }
@@ -351,7 +445,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(result.user)
       await saveProfile(result.user, initialSignupProfile)
       try {
-        await sendEmailVerification(result.user)
+        await sendEmailVerification(result.user, {
+          url: `${window.location.origin}/?emailVerified=1`,
+        })
       } catch (verificationError) {
         // Account creation should still succeed; the user can resend from Settings.
         console.warn('Could not send the initial email verification:', verificationError)
@@ -451,6 +547,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const refreshEmailVerification = async (): Promise<boolean> => {
+    const currentUser = auth.currentUser
+    if (!currentUser) {
+      setEmailVerified(false)
+      return false
+    }
+
+    const isEmailVerified = await syncEmailVerificationToFirestore(currentUser)
+    setEmailVerified(isEmailVerified)
+    return isEmailVerified
+  }
+
   const cancelMfaSignIn = () => {
     setPendingResolver(null)
   }
@@ -462,6 +570,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setPendingResolver(null)
       setUser(null)
       setProfile(null)
+      setEmailVerified(false)
     } finally {
       setLoading(false)
     }
@@ -476,6 +585,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     profile,
     loading,
+    emailVerified,
     pendingMfaLabel: pendingTotpHint?.displayName || 'Authenticator app',
     signUp,
     signIn,
@@ -483,6 +593,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     completeTotpSignIn,
     cancelMfaSignIn,
     refreshProfile,
+    refreshEmailVerification,
     signOut,
     resetPassword,
   }

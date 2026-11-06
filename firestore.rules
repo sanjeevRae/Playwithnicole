@@ -81,6 +81,18 @@ service cloud.firestore {
           request.resource.data.verified == 0);
     }
 
+    // Email verification is managed by Firebase Authentication. A user may
+    // create an unverified profile, but can only promote emailVerified after
+    // Firebase places email_verified=true in the signed-in ID token.
+    function safeInitialEmailVerification() {
+      return !('emailVerified' in request.resource.data) ||
+        request.resource.data.emailVerified == false ||
+        (
+          request.resource.data.emailVerified == true &&
+          request.auth.token.email_verified == true
+        );
+    }
+
     function validUserProfileUpdate() {
       return request.resource.data
         .diff(resource.data)
@@ -92,7 +104,8 @@ service cloud.firestore {
           'bio',
           'photoURL',
           'preferences',
-          'updatedAt'
+          'updatedAt',
+          'emailVerified'
         ]) &&
         (!('displayName' in request.resource.data) ||
           (request.resource.data.displayName is string &&
@@ -112,6 +125,14 @@ service cloud.firestore {
             request.resource.data.photoURL.size() <= 2048)) &&
         (!('updatedAt' in request.resource.data) ||
           request.resource.data.updatedAt is timestamp) &&
+        (
+          !request.resource.data
+            .diff(resource.data)
+            .affectedKeys()
+            .hasAny(['emailVerified']) ||
+          request.resource.data.emailVerified ==
+            request.auth.token.email_verified
+        ) &&
         (
           !('preferences' in request.resource.data) ||
           (
@@ -223,7 +244,8 @@ service cloud.firestore {
         safeInitialUserRole() &&
         safeInitialAdminFlag() &&
         safeInitialAdminRoleFlag() &&
-        safeInitialVerification()
+        safeInitialVerification() &&
+        safeInitialEmailVerification()
       );
 
       // Users can update only their profile fields.
