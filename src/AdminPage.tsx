@@ -10,6 +10,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDocs,
   limit,
   onSnapshot,
   orderBy,
@@ -22,7 +23,7 @@ import {
   type Timestamp,
 } from 'firebase/firestore'
 
-import { db } from '@/firebase'
+import { db } from './firebase'
 import { useAuth } from './contexts/AuthContext'
 import { Icon, Button, PageTitle } from './App'
 import type { View } from './types'
@@ -58,6 +59,7 @@ const USER_ROLE_OPTIONS = [
 type AdminUser = {
   id: string
   name: string
+  username: string
   email: string
   photoURL: string
   role: string
@@ -1324,6 +1326,17 @@ function AdminChats() {
         { merge: true },
       )
 
+      const notificationRef = doc(
+        collection(db, 'users', selectedConversation.userId, 'notifications'),
+      )
+      batch.set(notificationRef, {
+        title: 'New reply from Support Team',
+        body: (preview || 'The Support Team sent you a message.').slice(0, 950),
+        type: 'support',
+        read: false,
+        createdAt: serverTimestamp(),
+      })
+
       await batch.commit()
 
       setDraft('')
@@ -1829,6 +1842,7 @@ function AdminUserManagement() {
             return {
               id: userDoc.id,
               name: getUserName(data, userDoc.id),
+              username: typeof data.username === 'string' ? data.username.trim() : '',
               email:
                 typeof data.email === 'string'
                   ? data.email
@@ -1965,13 +1979,24 @@ function AdminUserManagement() {
     setUserBusy(user.id, true)
 
     try {
-      await updateDoc(
-        doc(db, USERS_COLLECTION, user.id),
-        {
-          verified: nextValue,
-          updatedAt: serverTimestamp(),
-        },
+      const batch = writeBatch(db)
+      batch.update(doc(db, USERS_COLLECTION, user.id), {
+        verified: nextValue,
+        updatedAt: serverTimestamp(),
+      })
+      const notificationRef = doc(
+        collection(db, USERS_COLLECTION, user.id, 'notifications'),
       )
+      batch.set(notificationRef, {
+        title: nextValue === 1 ? 'Your profile is verified' : 'Your verification status changed',
+        body: nextValue === 1
+          ? 'The Support Team has verified your community profile.'
+          : 'Your profile is currently marked as unverified. Contact support if you think this is a mistake.',
+        type: 'verification',
+        read: false,
+        createdAt: serverTimestamp(),
+      })
+      await batch.commit()
 
       flashNotice(
         nextValue === 1
@@ -1991,6 +2016,109 @@ function AdminUserManagement() {
       setUserBusy(user.id, false)
     }
   }
+
+  // ------------------------------------------
+  // CLEAR USER APPLICATION DATA (SPARK-SAFE)
+  // ------------------------------------------
+
+  const clearUserData = async (user: AdminUser) => {
+    if (busyUserIds.includes(user.id)) return
+
+    if (user.id === currentAdmin?.uid || user.role === 'admin') {
+      setError('For safety, administrator accounts cannot be cleared from this screen.')
+      return
+    }
+
+    const confirmationName = user.username || user.name
+    const confirmation = window.prompt(
+      `This clears ${user.name}'s Firestore profile, saved games, notifications, and support chat, then blocks this account from using the app. It does not delete the Firebase Authentication account or Cloudinary files.\n\nType ${confirmationName} exactly to continue:`,
+    )
+    if (confirmation?.trim() !== confirmationName) return
+
+    setError('')
+    setUserBusy(user.id, true)
+
+    try {
+      // Block the user's account before enumerating/deleting documents. This
+      // closes the race where an active client could create new data mid-clear.
+      await setDoc(doc(db, 'accountStates', user.id), {
+        status: 'data_clearing',
+        clearStartedAt: serverTimestamp(),
+        clearStartedBy: currentAdmin?.uid || '',
+      }, { merge: true })
+
+      // Read and delete only the user-scoped collections this app creates.
+      const userSubcollections = ['favorites', 'recentGames', 'notifications'] as const
+      for (const subcollectionName of userSubcollections) {
+        const childSnapshot = await getDocs(
+          collection(db, USERS_COLLECTION, user.id, subcollectionName),
+        )
+        for (let offset = 0; offset < childSnapshot.docs.length; offset += 400) {
+          const batch = writeBatch(db)
+          childSnapshot.docs.slice(offset, offset + 400).forEach((child) => {
+            batch.delete(child.ref)
+          })
+          await batch.commit()
+        }
+      }
+
+      // Delete the user's support chat as part of their app data.
+      const messagesSnapshot = await getDocs(
+        collection(db, 'supportConversations', user.id, 'messages'),
+      )
+      for (let offset = 0; offset < messagesSnapshot.docs.length; offset += 400) {
+        const batch = writeBatch(db)
+        messagesSnapshot.docs.slice(offset, offset + 400).forEach((message) => {
+          batch.delete(message.ref)
+        })
+        await batch.commit()
+      }
+
+      // Mark deletion requests as processed while removing their identifying fields.
+      const deletionRequests = await getDocs(
+        query(
+          collection(db, 'accountDeletionRequests'),
+          where('userId', '==', user.id),
+        ),
+      )
+      for (let offset = 0; offset < deletionRequests.docs.length; offset += 400) {
+        const batch = writeBatch(db)
+        deletionRequests.docs.slice(offset, offset + 400).forEach((requestDoc) => {
+          batch.update(requestDoc.ref, {
+            userId: null,
+            username: null,
+            email: null,
+            status: 'data_cleared',
+            processedAt: serverTimestamp(),
+            processedBy: currentAdmin?.uid || '',
+          })
+        })
+        await batch.commit()
+      }
+
+      // The marker prevents the still-existing Auth identity from recreating
+      // a profile or reading the app after its Firestore data is cleared.
+      const finalBatch = writeBatch(db)
+      finalBatch.update(doc(db, 'accountStates', user.id), {
+        status: 'data_cleared',
+        clearedAt: serverTimestamp(),
+        clearedBy: currentAdmin?.uid || '',
+      })
+      finalBatch.delete(doc(db, 'supportConversations', user.id))
+      finalBatch.delete(doc(db, USERS_COLLECTION, user.id))
+      await finalBatch.commit()
+
+      flashNotice(`${user.name}'s Firestore application data was cleared and app access was blocked.`)
+    } catch (clearError) {
+      console.error('Could not clear user data:', clearError)
+      setError(
+        `Could not clear ${user.name}'s data completely. ${getErrorMessage(clearError)} Some earlier batches may already have been deleted, so review the user's Firestore records before retrying.`,
+      )
+    } finally {
+      setUserBusy(user.id, false)
+    }
+  }
+
 
   // ------------------------------------------
   // SEARCH
@@ -2197,6 +2325,7 @@ function AdminUserManagement() {
                 <span>Role</span>
                 <span>Verification</span>
                 <span>Joined</span>
+                <span>Data</span>
               </div>
 
               {filteredUsers.map((user) => {
@@ -2354,6 +2483,19 @@ function AdminUserManagement() {
                         )}
                       </span>
                     </div>
+
+                    <div className="adminUserDataCell">
+                      <label className="adminUsersMobileLabel">Data</label>
+                      <button
+                        type="button"
+                        className="adminClearUserDataButton"
+                        disabled={busy || isCurrentAdmin || user.role === 'admin'}
+                        title={user.role === 'admin' ? 'Administrator accounts are protected' : 'Clear this user’s Firestore application data'}
+                        onClick={() => void clearUserData(user)}
+                      >
+                        {busy ? 'Working...' : 'Clear data'}
+                      </button>
+                    </div>
                   </article>
                 )
               })}
@@ -2368,9 +2510,9 @@ function AdminUserManagement() {
         <p>
           <b>Administrator permissions</b>
           <span>
-            Only administrators can change member roles and verification
-            status. Your own administrator role is protected from
-            accidental changes.
+            Only administrators can change member roles and verification status.
+            Clear data removes this app's Firestore records and blocks app access;
+            it does not remove the Firebase Authentication account or Cloudinary files.
           </span>
         </p>
       </div>
@@ -2573,6 +2715,7 @@ export function AdminPage({
             return {
               id: userDoc.id,
               name: getUserName(data, userDoc.id),
+              username: typeof data.username === 'string' ? data.username.trim() : '',
 
               email:
                 typeof data.email === 'string'
@@ -4476,11 +4619,8 @@ export function AdminPage({
     overviewUsers.slice(0, 4)
 
   // Profile lookup for support queue.
-  const overviewUserMap = new Map(
-    overviewUsers.map((user) => [
-      user.id,
-      user,
-    ] as const),
+  const overviewUserMap = new Map<string, AdminUser>(
+    overviewUsers.map((user) => [user.id, user]),
   )
 
   // Latest open member messages.
@@ -4814,10 +4954,8 @@ export function AdminPage({
             })
           ) : (
             <div className="overviewEmpty">
-              <Icon name="chat" size={23} />
-
-              <b>No pending messages</b>
-
+             <br/> No pending messages 
+             <br/>
               <small>
                 New unanswered member messages will appear here.
               </small>

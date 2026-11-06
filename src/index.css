@@ -5711,3 +5711,485 @@ textarea {
     font-size: 7px;
   }
 }
+/* =========================================================
+   ACCOUNT VERIFICATION, LIVE NOTIFICATIONS & SECURITY
+   ========================================================= */
+
+/* Profile menu verification status */
+.profileVerification {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+
+.profileVerification > span {
+  display: inline-grid;
+  width: 15px;
+  height: 15px;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.profileVerification.isVerified { color: #75e5b3; }
+.profileVerification.isVerified > span { background: #22a875; }
+.profileVerification.isUnverified { color: #aeb0bd; }
+.profileVerification.isUnverified > span { background: #737786; }
+
+/* Dashboard overview cards */
+.feature > small {
+  color: #fff;
+  font-weight: 600;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .8);
+}
+
+.dashGrid {
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  align-items: stretch;
+  gap: 20px;
+}
+
+.dashGrid section {
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid rgba(255, 255, 255, .09);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(139, 92, 246, .11), transparent 42%),
+    linear-gradient(145deg, rgba(29, 28, 45, .98), rgba(17, 17, 28, .98));
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .16);
+  transition: border-color .2s ease, transform .2s ease, box-shadow .2s ease;
+}
+
+.dashGrid section:hover {
+  transform: translateY(-2px);
+  border-color: rgba(167, 139, 250, .28);
+  box-shadow: 0 22px 55px rgba(0, 0, 0, .24);
+}
+
+.dashGrid .widgetHead { margin-bottom: 20px; }
+.dashGrid .widgetHead h3 { color: #f5f3ff; font-size: 15px; }
+.dashGrid .widgetHead button { color: #c4adff; font-size: 10px; font-weight: 700; }
+
+.dashGrid .announcement {
+  min-height: 190px;
+  padding: 22px;
+  border: 1px solid rgba(167, 139, 250, .16);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(111, 75, 183, .19), rgba(50, 45, 75, .14));
+}
+
+.dashGrid .announcement > span {
+  display: inline-flex;
+  margin-bottom: 14px;
+  padding: 6px 9px;
+  border: 1px solid rgba(190, 166, 255, .2);
+  border-radius: 999px;
+  background: rgba(139, 92, 246, .12);
+  color: #d2c2ff;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .12em;
+}
+
+.dashGrid .announcement h4 {
+  max-width: 390px;
+  color: #fff;
+  font: 600 19px/1.35 'Space Grotesk', sans-serif;
+}
+
+.dashGrid .announcement p {
+  max-width: 430px;
+  margin: 9px 0 18px;
+  color: #b9b6c9;
+  font-size: 10px;
+  line-height: 1.75;
+}
+
+.dashGrid .announcement > button:not(.btn) {
+  color: #d3c2ff;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.dashGrid .announcement .btn { padding: 10px 14px; font-size: 10px; }
+
+/* Header notifications */
+.notificationHeaderButton {
+  display: inline-flex;
+  min-width: 36px;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  color: #c9c6d7;
+  transition: background .2s, border-color .2s, color .2s;
+}
+
+.notificationHeaderButton:hover {
+  border-color: rgba(167, 139, 250, .2);
+  background: rgba(139, 92, 246, .12);
+  color: #fff;
+}
+
+.headerBtns .notificationHeaderButton > i {
+  top: 5px;
+  right: 5px;
+  width: 7px;
+  height: 7px;
+  border: 1px solid #11101a;
+  background: #fa6c8e;
+}
+
+.notificationCount {
+  position: absolute;
+  top: -5px;
+  right: -7px;
+  display: inline-flex;
+  min-width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border: 1px solid #171420;
+  border-radius: 999px;
+  background: #e85f83;
+  color: #fff;
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+/* Live notifications */
+.liveNoticeList { max-width: 860px; overflow: hidden; }
+
+.liveNoticeHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 20px 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.liveNoticeHeader h3 { color: #f5f2fc; font: 600 15px 'Space Grotesk', sans-serif; }
+.liveNoticeHeader p { margin-top: 5px; color: #89869a; font-size: 9px; }
+.liveNoticeHeader > button { color: #c6b0ff; font-size: 9px; font-weight: 700; }
+.liveNoticeHeader > button:disabled { opacity: .4; cursor: not-allowed; }
+
+.liveNotice {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background .18s ease;
+}
+
+.liveNotice:hover { background: rgba(255, 255, 255, .025); }
+.liveNotice.isUnread { background: rgba(139, 92, 246, .045); }
+.liveNotice > div { min-width: 0; }
+.liveNotice b { color: #f1eff8; font-size: 11px; }
+.liveNotice p { color: #aaa6ba; font-size: 10px; line-height: 1.6; overflow-wrap: anywhere; }
+.liveNotice small { display: block; margin-top: 6px; color: #777489; font-size: 8px; }
+.liveNotice.isRead > span { background: rgba(255, 255, 255, .055); color: #9692a5; }
+
+.notificationState {
+  display: flex;
+  min-height: 210px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 28px;
+  color: #9692a5;
+  text-align: center;
+  font-size: 10px;
+}
+
+.notificationState b { color: #f2effa; font: 600 13px 'Space Grotesk', sans-serif; }
+.notificationState p { max-width: 300px; color: #8c889d; line-height: 1.7; }
+
+/* Password and account security */
+.settingsSecurityPanel { min-width: 0; }
+.passwordForm { display: grid; gap: 14px; }
+.passwordForm > label,
+.passwordForm .formGrid > label,
+.totpEnrollmentForm > label,
+.stepUpForm > label,
+.confirmationModal > label {
+  display: grid;
+  gap: 8px;
+  color: #d9d5e6;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.passwordForm input,
+.totpEnrollmentForm input,
+.stepUpForm input,
+.totpReauthField input,
+.confirmationModal input {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 11px 13px;
+  outline: none;
+  border: 1px solid rgba(255, 255, 255, .11);
+  border-radius: 9px;
+  background: #10101a;
+  color: #fff;
+  font-size: 11px;
+  transition: border-color .2s, box-shadow .2s, background .2s;
+}
+
+.passwordForm input:focus,
+.totpEnrollmentForm input:focus,
+.stepUpForm input:focus,
+.totpReauthField input:focus,
+.confirmationModal input:focus {
+  border-color: rgba(167, 139, 250, .65);
+  background: #141321;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, .12);
+}
+
+.passwordForm .formGrid { gap: 12px; }
+.passwordForm .btn { justify-self: start; margin-top: 2px; padding: 11px 16px; font-size: 10px; }
+
+.googleSecurityNotice {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, .09);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .025);
+}
+
+.googleSecurityIcon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .06);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.googleSecurityNotice b { color: #f4f1fb; font-size: 11px; }
+.googleSecurityNotice p { margin-top: 5px; color: #a7a3b6; font-size: 9px; line-height: 1.7; }
+.googleSecurityNotice a { display: inline-block; margin-top: 9px; color: #c4adff; font-size: 9px; font-weight: 700; text-decoration: none; }
+.googleSecurityNotice a:hover { text-decoration: underline; }
+
+.securityFeedback { display: grid; gap: 8px; margin-top: 12px; }
+.securitySuccess,
+.securityError {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  font-size: 9px;
+  line-height: 1.6;
+}
+.securitySuccess { border: 1px solid rgba(64, 190, 139, .2); background: rgba(64, 190, 139, .07); color: #83e2b8; }
+.securityError { border: 1px solid rgba(242, 111, 136, .2); background: rgba(242, 111, 136, .07); color: #ffa0b3; }
+
+.emailVerificationNotice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid rgba(240, 180, 90, .2);
+  border-radius: 11px;
+  background: rgba(240, 180, 90, .055);
+}
+.emailVerificationNotice b { color: #f4d49b; font-size: 10px; }
+.emailVerificationNotice p { margin-top: 4px; color: #b9a98b; font-size: 8px; line-height: 1.6; }
+.emailVerificationNotice button { flex: none; color: #f5d59c; font-size: 8px; font-weight: 700; }
+
+.totpSecurityCard {
+  margin-top: 25px;
+  padding: 18px;
+  border: 1px solid rgba(139, 92, 246, .2);
+  border-radius: 14px;
+  background: linear-gradient(140deg, rgba(139, 92, 246, .075), rgba(255, 255, 255, .018));
+}
+
+.totpSecurityHead { display: flex; align-items: center; gap: 12px; }
+.totpSecurityHead > div { flex: 1; min-width: 0; }
+.totpSecurityHead b { color: #f4f1fb; font-size: 11px; }
+.totpSecurityHead p { margin-top: 4px; color: #9f9bae; font-size: 9px; line-height: 1.55; }
+.totpSecurityIcon { display: grid; width: 38px; height: 38px; flex: none; place-items: center; border: 1px solid rgba(164, 133, 244, .2); border-radius: 11px; background: rgba(139, 92, 246, .12); color: #c5adff; }
+
+.securityStatusPill { flex: none; padding: 6px 9px; border-radius: 999px; font-size: 8px; font-weight: 800; }
+.securityStatusPill.enabled { border: 1px solid rgba(75, 203, 150, .2); background: rgba(75, 203, 150, .1); color: #7ce2b4; }
+.securityStatusPill.disabled { border: 1px solid rgba(255, 255, 255, .1); background: rgba(255, 255, 255, .05); color: #a5a2b2; }
+
+.totpNotEnabledState,
+.totpEnabledState,
+.totpEnrollmentForm,
+.stepUpForm { display: grid; gap: 13px; margin-top: 16px; }
+.totpNotEnabledState > p,
+.totpEnabledState > p,
+.stepUpForm > p,
+.totpEnrollmentForm p { color: #aaa6ba; font-size: 9px; line-height: 1.7; }
+.totpEnabledState > p:first-child { display: flex; align-items: center; gap: 7px; color: #7fe0b4; }
+.totpEnabledState .helper { color: #888499; font-size: 8px; }
+.totpNotEnabledState .btn,
+.totpEnrollmentForm .btn,
+.stepUpForm .btn { justify-self: start; padding: 10px 14px; font-size: 9px; }
+.totpReauthField { display: grid; max-width: 320px; gap: 7px; color: #d5d1e2; font-size: 9px; }
+
+.totpQrWrap { display: flex; align-items: center; gap: 18px; padding: 14px; border: 1px solid rgba(255, 255, 255, .08); border-radius: 11px; background: rgba(0, 0, 0, .13); }
+.totpQrWrap img { width: 150px; height: 150px; flex: none; padding: 6px; border-radius: 9px; background: #fff; object-fit: contain; }
+.totpQrWrap > div { display: grid; gap: 7px; }
+.totpQrWrap b { color: #f3efff; font-size: 10px; }
+.totpQrWrap small { color: #aaa6ba; font-size: 8px; }
+.totpQrWrap code { display: block; padding: 8px; border: 1px solid rgba(255, 255, 255, .08); border-radius: 7px; background: #0d0c15; color: #e5dcff; font-size: 9px; line-height: 1.6; overflow-wrap: anywhere; user-select: all; }
+.totpEnrollmentForm > label input,
+.stepUpForm > label input { max-width: 280px; letter-spacing: .3em; font-size: 15px; }
+.totpActions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.totpActions > button:not(.btn) { color: #a7a2b4; font-size: 9px; }
+.securityDangerButton { justify-self: start; margin-top: 4px; padding: 8px 0; font-size: 9px; }
+.stepUpForm { padding: 14px; border: 1px solid rgba(240, 180, 90, .2); border-radius: 10px; background: rgba(240, 180, 90, .045); }
+.stepUpForm b { color: #f0d29b; font-size: 10px; }
+
+.accountDeletionCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 25px;
+  padding: 17px 0 0;
+  border-top: 1px solid var(--line);
+}
+.accountDeletionCard b { color: #f2edf5; font-size: 10px; }
+.accountDeletionCard p { max-width: 420px; margin-top: 5px; color: #928da0; font-size: 8px; line-height: 1.65; }
+.accountDeletionCard .danger { flex: none; margin: 0; padding: 9px 12px; border: 1px solid rgba(242, 111, 136, .2); border-radius: 8px; background: rgba(242, 111, 136, .07); color: #ff93a8; font-size: 8px; font-weight: 700; }
+.accountDeletionCard .danger:hover { background: rgba(242, 111, 136, .14); }
+
+/* Deletion confirmation modal */
+.confirmationOverlay {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(4, 4, 9, .78);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+.confirmationModal {
+  display: grid;
+  width: min(100%, 440px);
+  gap: 15px;
+  padding: 28px;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 18px;
+  background: #171622;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, .55);
+}
+
+.confirmationDangerIcon { display: grid; width: 46px; height: 46px; place-items: center; border: 1px solid rgba(242, 111, 136, .22); border-radius: 13px; background: rgba(242, 111, 136, .1); color: #ff8fa5; }
+.confirmationModal h2 { color: #fff; font: 600 21px 'Space Grotesk', sans-serif; }
+.confirmationModal > p { color: #aaa6ba; font-size: 10px; line-height: 1.75; }
+.confirmationModal > label b { color: #fff; }
+.confirmationActions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+.confirmationActions button { min-height: 38px; padding: 0 14px; border-radius: 8px; font-size: 9px; font-weight: 750; }
+.confirmationCancel { border: 1px solid rgba(255, 255, 255, .1); background: rgba(255, 255, 255, .045); color: #d4d0df; }
+.confirmationSubmit { background: #d95777; color: #fff; }
+.confirmationSubmit:disabled { opacity: .4; cursor: not-allowed; }
+
+/* Admin Clear User Data action */
+.adminUsersTable { min-width: 900px; }
+.adminUsersTableHead,
+.adminUsersTableRow {
+  grid-template-columns:
+    minmax(245px, 1.7fr)
+    minmax(120px, .75fr)
+    minmax(140px, .85fr)
+    minmax(100px, .6fr)
+    minmax(100px, .55fr);
+}
+
+.adminUserDataCell { min-width: 0; }
+.adminClearUserDataButton {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border: 1px solid rgba(242, 111, 136, .22);
+  border-radius: 7px;
+  background: rgba(242, 111, 136, .07);
+  color: #ff9aad;
+  font-size: 8px;
+  font-weight: 750;
+  white-space: nowrap;
+  transition: background .18s, border-color .18s, opacity .18s;
+}
+.adminClearUserDataButton:hover:not(:disabled) { border-color: rgba(242, 111, 136, .45); background: rgba(242, 111, 136, .15); }
+.adminClearUserDataButton:disabled { opacity: .4; cursor: not-allowed; }
+
+@media (max-width: 900px) {
+  .dashGrid { grid-template-columns: 1fr; }
+  .dashGrid section { padding: 20px; }
+}
+
+@media (max-width: 600px) {
+  .feature > small { right: 15px; bottom: 13px; left: 15px; font-size: 8px; }
+  .dashGrid { gap: 13px; margin-top: 18px; }
+  .dashGrid section { padding: 16px; }
+  .dashGrid .announcement { min-height: 0; padding: 17px; }
+  .dashGrid .announcement h4 { font-size: 17px; }
+  .liveNoticeHeader { align-items: flex-start; padding: 16px; }
+  .liveNotice { padding: 13px; }
+  .totpSecurityCard { padding: 14px; }
+  .totpSecurityHead { align-items: flex-start; flex-wrap: wrap; }
+  .totpSecurityHead > div { flex-basis: calc(100% - 54px); }
+  .securityStatusPill { margin-left: 50px; }
+  .totpQrWrap { flex-direction: column; align-items: flex-start; }
+  .totpQrWrap img { width: 180px; height: 180px; }
+  .emailVerificationNotice,
+  .accountDeletionCard { align-items: flex-start; flex-direction: column; }
+  .accountDeletionCard .danger { width: 100%; }
+  .confirmationModal { padding: 22px; }
+}
+
+
+/* Final layout refinements for account status and verification controls */
+.profileStatusText.verified { color: #67dba9; }
+.profileStatusText.unverified { color: #b0b3c0; }
+.emailVerificationActions { display: flex; flex-wrap: wrap; gap: 8px; }
+.emailVerificationActions button { border: 1px solid rgba(255,255,255,.1); border-radius: 8px; background: rgba(255,255,255,.05); color: #e7e4ef; padding: 9px 12px; font-size: 11px; font-weight: 650; cursor: pointer; }
+.emailVerificationActions button:hover:not(:disabled) { background: rgba(255,255,255,.1); }
+.emailVerificationActions button:disabled { opacity: .5; cursor: wait; }
+
+@media (max-width: 760px) {
+  .adminUsersTable { min-width: 0; }
+  .adminUsersTableHead { display: none; }
+  .adminUsersTableRow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px 10px; padding: 16px 14px; }
+  .adminUserIdentity { grid-column: 1 / -1; }
+  .adminUserRoleCell, .adminUserVerificationCell, .adminUserJoinedCell, .adminUserDataCell { min-width: 0; }
+  .adminUserDataCell { display: flex; align-items: flex-start; flex-direction: column; gap: 7px; }
+  .adminClearUserDataButton { min-height: 34px; }
+}

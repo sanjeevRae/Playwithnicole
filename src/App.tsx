@@ -24,8 +24,21 @@ import {
   writeBatch,
 } from 'firebase/firestore'
 
-import { db } from '@/firebase'
+import { db, auth } from './firebase'
 import { useAuth } from './contexts/AuthContext'
+import {
+  EmailAuthProvider,
+  GoogleAuthProvider,
+  multiFactor,
+  reauthenticateWithCredential,
+  reauthenticateWithPopup,
+  reload,
+  sendEmailVerification,
+  TotpMultiFactorGenerator,
+  updatePassword,
+  type TotpSecret,
+} from 'firebase/auth'
+import QRCode from 'qrcode'
 import { AdminPage } from './AdminPage'
 
 // ==========================================
@@ -820,6 +833,56 @@ export const Icon = ({
         <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z" />
       </>
     ),
+
+    'check-circle': (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="m8 12 2.5 2.5L16.5 9" />
+      </>
+    ),
+
+    'alert-circle': (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 8v5M12 16.5h.01" />
+      </>
+    ),
+
+    'shield-check': (
+      <>
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+        <path d="m8.5 12 2.2 2.2 4.8-4.8" />
+      </>
+    ),
+
+    'trash-2': (
+      <>
+        <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+        <path d="M10 11v5M14 11v5" />
+      </>
+    ),
+
+    mail: (
+      <>
+        <rect x="3" y="5" width="18" height="14" rx="2" />
+        <path d="m4 7 8 6 8-6" />
+      </>
+    ),
+
+    users: (
+      <>
+        <path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" />
+        <circle cx="9.5" cy="7" r="4" />
+        <path d="M20 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+      </>
+    ),
+
+    eye: (
+      <>
+        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+        <circle cx="12" cy="12" r="3" />
+      </>
+    ),
   }
 
   return (
@@ -859,16 +922,19 @@ export const Button = ({
   secondary = false,
   onClick,
   type = 'button',
+  disabled = false,
 }: {
   children: ReactNode
   secondary?: boolean
   onClick?: () => void
   type?: 'button' | 'submit' | 'reset'
+  disabled?: boolean
 }) => (
   <button
     type={type}
     className={`btn ${secondary ? 'secondary' : ''}`}
     onClick={onClick}
+    disabled={disabled}
   >
     {children}
   </button>
@@ -902,7 +968,7 @@ const ProfileAvatar = ({
     'Player'
 
   const initial = String(displayName).charAt(0).toUpperCase()
-  const role = profile?.role ?? 'member'
+  const verified = profile?.verified === 1 || profile?.verified === true
 
   return (
     <div
@@ -928,7 +994,11 @@ const ProfileAvatar = ({
 
         <div className="profileInfo">
           <b>{displayName}</b>
-          <small>{role}</small>
+          <small className={`profileVerification ${verified ? 'isVerified' : 'isUnverified'}`}>
+            {verified ? 'Verified' : 'Unverified'}
+            <span aria-hidden="true">{verified ? '✓' : '!'}</span>
+            
+          </small>
         </div>
       </div>
 
@@ -1617,6 +1687,9 @@ function AuthModal({
     signIn,
     signUp,
     signInWithGoogle,
+    completeTotpSignIn,
+    cancelMfaSignIn,
+    pendingMfaLabel,
     resetPassword,
   } = useAuth()
 
@@ -1646,6 +1719,8 @@ function AuthModal({
   const [showPassword, setShowPassword] = useState(false)
   const [authError, setAuthError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [mfaChallenge, setMfaChallenge] = useState(false)
+  const [mfaCode, setMfaCode] = useState('')
 
   return (
     <div className="modal">
@@ -1691,7 +1766,61 @@ function AuthModal({
             </div>
           )}
 
-          {mode === 'verify' ? (
+          {mfaChallenge ? (
+            <form
+              className="mfaChallengeForm"
+              onSubmit={async (event) => {
+                event.preventDefault()
+                setAuthError('')
+                setLoading(true)
+                try {
+                  await completeTotpSignIn(mfaCode)
+                  setMfaChallenge(false)
+                  setMfaCode('')
+                  enter()
+                } catch (error) {
+                  setAuthError(
+                    error instanceof Error
+                      ? error.message
+                      : 'The authenticator code could not be verified.',
+                  )
+                } finally {
+                  setLoading(false)
+                }
+              }}
+            >
+              <div className="verifyArt"><Icon name="shield" size={26} /></div>
+              <h3>Two-factor verification</h3>
+              <p>Enter the six-digit code from {pendingMfaLabel} to finish signing in.</p>
+              <label>
+                Authenticator code
+                <input
+                  autoComplete="one-time-code"
+                  inputMode="numeric"
+                  pattern="[0-9]{6}"
+                  maxLength={6}
+                  required
+                  value={mfaCode}
+                  onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="000000"
+                />
+              </label>
+              <Button type="submit" disabled={loading || mfaCode.length !== 6}>
+                {loading ? 'Verifying...' : 'Verify and sign in'}
+              </Button>
+              <button
+                type="button"
+                className="mfaCancelButton"
+                onClick={() => {
+                  cancelMfaSignIn()
+                  setMfaChallenge(false)
+                  setMfaCode('')
+                }}
+              >
+                Cancel and return to login
+              </button>
+            </form>
+          ) : mode === 'verify' ? (
             <>
               <div className="verifyArt">✦</div>
 
@@ -1708,12 +1837,17 @@ function AuthModal({
 
                 try {
                   if (mode === 'login') {
-                    await signIn(email, password)
+                    const needsMfa = await signIn(email, password)
+                    if (needsMfa) {
+                      setMfaChallenge(true)
+                      return
+                    }
                   } else if (mode === 'signup') {
                     await signUp(
                       email,
                       password,
                       displayName,
+                      username,
                     )
                   } else if (mode === 'forgot') {
                     await resetPassword(email)
@@ -1755,6 +1889,8 @@ function AuthModal({
 
                     <input
                       required
+                      minLength={3}
+                      maxLength={24}
                       value={username}
                       onChange={(event) =>
                         setUsername(event.target.value)
@@ -1866,7 +2002,11 @@ function AuthModal({
                     setLoading(true)
 
                     try {
-                      await signInWithGoogle()
+                      const needsMfa = await signInWithGoogle()
+                      if (needsMfa) {
+                        setMfaChallenge(true)
+                        return
+                      }
                       enter()
                     } catch (error) {
                       console.error(
@@ -1928,10 +2068,32 @@ function Dashboard({
   logout: () => void
 }) {
   const { user, profile } = useAuth()
-
-  if (!user) return null
+  const [unreadNotifications, setUnreadNotifications] = useState(0)
 
   const isAdmin = profile?.role === 'admin'
+
+  useEffect(() => {
+    if (!user?.uid || isAdmin) {
+      setUnreadNotifications(0)
+      return
+    }
+
+    const unreadQuery = query(
+      collection(db, 'users', user.uid, 'notifications'),
+      where('read', '==', false),
+    )
+
+    return onSnapshot(
+      unreadQuery,
+      (snapshot) => setUnreadNotifications(snapshot.size),
+      (error) => {
+        console.error('Unread notification count failed:', error)
+        setUnreadNotifications(0)
+      },
+    )
+  }, [user?.uid, isAdmin])
+
+  if (!user) return null
 
   const safeView: View =
     !isAdmin && ADMIN_ONLY_VIEWS.includes(view)
@@ -2024,10 +2186,23 @@ function Dashboard({
           </div>
 
           <div className="headerBtns">
-            <button type="button">
-              <Icon name="bell" />
-              <i />
-            </button>
+            {!isAdmin && (
+              <button
+                type="button"
+                className="notificationHeaderButton"
+                onClick={() => safeGo('notifications')}
+                aria-label={`Open notifications${unreadNotifications ? `, ${unreadNotifications} unread` : ''}`}
+                title="Notifications"
+              >
+                <Icon name="bell" />
+                {unreadNotifications > 0 && <i />}
+                {unreadNotifications > 0 && (
+                  <span className="notificationCount">
+                    {unreadNotifications > 99 ? '99+' : unreadNotifications}
+                  </span>
+                )}
+              </button>
+            )}
 
             <ProfileAvatar
               user={user}
@@ -2061,6 +2236,8 @@ function UserPage({
   view: View
   go: (v: View) => void
 }) {
+  const { profile } = useAuth()
+
   if (view === 'messages') return <Messages />
   if (view === 'social') return <Social />
   if (view === 'games') return <Games go={go} />
@@ -2074,47 +2251,7 @@ function UserPage({
     )
   }
 
-  if (view === 'notifications') {
-    return (
-      <>
-        <PageTitle
-          kicker="STAY IN THE LOOP"
-          title="Notifications"
-          sub="Your latest game, community, and account updates."
-        />
-
-        <div className="panel noticeList">
-          {[
-            'New community event announced',
-            'Astral Frontier added to your favorites',
-            'Your profile is now verified',
-            'Support replied to your ticket',
-          ].map((item, index) => (
-            <div key={index} className="notice">
-              <span>
-                <Icon
-                  name={index === 2 ? 'shield' : 'bell'}
-                />
-              </span>
-
-              <div>
-                <b>{item}</b>
-                <p>
-                  {index < 2
-                    ? 'A few minutes ago'
-                    : 'Earlier this week'}
-                </p>
-              </div>
-
-              {index < 2 && <i />}
-            </div>
-          ))}
-        </div>
-      </>
-    )
-  }
-
-  const { profile } = useAuth()
+  if (view === 'notifications') return <NotificationsView />
 
   return (
     <>
@@ -2262,6 +2399,156 @@ function UserPage({
           <Icon name="arrow" />
         </button>
       </div>
+    </>
+  )
+}
+
+// ==========================================
+// LIVE USER NOTIFICATIONS
+// ==========================================
+
+type UserNotification = {
+  id: string
+  title: string
+  body: string
+  type: string
+  read: boolean
+  createdAt?: any
+}
+
+function NotificationsView() {
+  const { user } = useAuth()
+  const [items, setItems] = useState<UserNotification[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!user?.uid) {
+      setItems([])
+      setLoading(false)
+      return
+    }
+
+    setLoading(true)
+    const notificationsQuery = query(
+      collection(db, 'users', user.uid, 'notifications'),
+      orderBy('createdAt', 'desc'),
+      limit(50),
+    )
+
+    return onSnapshot(
+      notificationsQuery,
+      (snapshot) => {
+        setItems(
+          snapshot.docs.map((notificationDoc) => {
+            const data = notificationDoc.data()
+            return {
+              id: notificationDoc.id,
+              title: typeof data.title === 'string' ? data.title : 'Account update',
+              body: typeof data.body === 'string' ? data.body : '',
+              type: typeof data.type === 'string' ? data.type : 'general',
+              read: data.read === true,
+              createdAt: data.createdAt,
+            }
+          }),
+        )
+        setLoading(false)
+        setError('')
+      },
+      (snapshotError) => {
+        console.error('Notification subscription failed:', snapshotError)
+        setError('Notifications could not be loaded. Check your Firestore rules and try again.')
+        setLoading(false)
+      },
+    )
+  }, [user?.uid])
+
+  const markRead = async (notificationId: string) => {
+    if (!user?.uid) return
+    try {
+      await updateDoc(
+        doc(db, 'users', user.uid, 'notifications', notificationId),
+        { read: true, readAt: serverTimestamp() },
+      )
+    } catch (markError) {
+      console.error('Could not mark notification as read:', markError)
+      setError('Could not update the notification. Please try again.')
+    }
+  }
+
+  const markAllRead = async () => {
+    if (!user?.uid) return
+    const unreadItems = items.filter((item) => !item.read)
+    if (!unreadItems.length) return
+
+    try {
+      for (let offset = 0; offset < unreadItems.length; offset += 400) {
+        const batch = writeBatch(db)
+        unreadItems.slice(offset, offset + 400).forEach((item) => {
+          batch.update(
+            doc(db, 'users', user.uid, 'notifications', item.id),
+            { read: true, readAt: serverTimestamp() },
+          )
+        })
+        await batch.commit()
+      }
+    } catch (markError) {
+      console.error('Could not mark all notifications as read:', markError)
+      setError('Some notifications could not be marked as read.')
+    }
+  }
+
+  const unreadCount = items.filter((item) => !item.read).length
+
+  return (
+    <>
+      <PageTitle
+        kicker="STAY IN THE LOOP"
+        title="Notifications"
+        sub="Your latest account, verification, and support updates."
+      />
+
+      {error && <div className="supportChatError" role="alert">{error}</div>}
+
+      <section className="panel noticeList liveNoticeList">
+        <div className="liveNoticeHeader">
+          <div>
+            <h3>Recent activity</h3>
+            <p>{unreadCount} unread {unreadCount === 1 ? 'notification' : 'notifications'}</p>
+          </div>
+          <button type="button" onClick={() => void markAllRead()} disabled={unreadCount === 0 || loading}>
+            Mark all as read
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="notificationState"><span className="gameSpinner" /> Loading your notifications...</div>
+        ) : items.length === 0 ? (
+          <div className="notificationState">
+            <Icon name="bell" size={28} />
+            <b>You are all caught up</b>
+            <p>New support replies and account updates will appear here.</p>
+          </div>
+        ) : (
+          items.map((item) => (
+            <button
+              className={`notice liveNotice ${item.read ? 'isRead' : 'isUnread'}`}
+              key={item.id}
+              type="button"
+              onClick={() => !item.read && void markRead(item.id)}
+              aria-label={`${item.read ? 'Read' : 'Unread'} notification: ${item.title}`}
+            >
+              <span><Icon name={item.type === 'verification' ? 'shield' : item.type === 'support' ? 'chat' : 'bell'} /></span>
+              <div>
+                <b>{item.title}</b>
+                <p>{item.body}</p>
+                <small>{formatRelativeDate(item.createdAt) || 'Just now'}</small>
+              </div>
+              {!item.read && <i aria-label="Unread" />}
+            </button>
+          ))
+        )}
+      </section>
     </>
   )
 }
@@ -3515,12 +3802,43 @@ function Settings({
 
   const [libraryError, setLibraryError] = useState('')
 
-  const [toggles, setToggles] = useState([
-    true,
-    true,
-    true,
-    false,
-  ])
+  const [emailNotifications, setEmailNotifications] = useState(true)
+  const [communityUpdates, setCommunityUpdates] = useState(true)
+  const [profileVisible, setProfileVisible] = useState(true)
+
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmNewPassword, setConfirmNewPassword] = useState('')
+  const [securityBusy, setSecurityBusy] = useState(false)
+  const [securityMessage, setSecurityMessage] = useState('')
+  const [securityError, setSecurityError] = useState('')
+
+  const [totpSecret, setTotpSecret] = useState<TotpSecret | null>(null)
+  const [totpQrCode, setTotpQrCode] = useState('')
+  const [totpCode, setTotpCode] = useState('')
+  const [mfaRevision, setMfaRevision] = useState(0)
+  const [stepUpResolver, setStepUpResolver] = useState<any>(null)
+  const [stepUpAction, setStepUpAction] = useState<'password' | 'enroll' | 'disable' | null>(null)
+  const [stepUpCode, setStepUpCode] = useState('')
+
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [deleteUsername, setDeleteUsername] = useState('')
+  const [deleteBusy, setDeleteBusy] = useState(false)
+
+  const hasPasswordProvider = Boolean(
+    user?.providerData.some((provider) => provider.providerId === 'password'),
+  )
+  const hasGoogleProvider = Boolean(
+    user?.providerData.some((provider) => provider.providerId === 'google.com'),
+  )
+  const isGoogleOnlyAccount = hasGoogleProvider && !hasPasswordProvider
+  const enrolledTotpFactor = user
+    ? multiFactor(user).enrolledFactors.find(
+        (factor) => factor.factorId === TotpMultiFactorGenerator.FACTOR_ID,
+      )
+    : undefined
+  // Keep this dependency so successful enrollment/unenrollment refreshes this derived value.
+  void mfaRevision
 
   // LOAD REAL PROFILE DATA
 
@@ -3556,6 +3874,13 @@ function Settings({
     profile?.bio,
     profile?.photoURL,
   ])
+
+  useEffect(() => {
+    const preferences = profile?.preferences || {}
+    setEmailNotifications(preferences.emailNotifications !== false)
+    setCommunityUpdates(preferences.communityUpdates !== false)
+    setProfileVisible(preferences.profileVisible !== false)
+  }, [profile?.preferences])
 
   // LISTEN TO FAVORITES AND RECENT GAMES
 
@@ -3825,6 +4150,326 @@ function Settings({
     ) / 4 * 100,
   )
 
+  const updatePreference = async (
+    field: 'emailNotifications' | 'communityUpdates' | 'profileVisible',
+    value: boolean,
+  ) => {
+    if (!user?.uid) return
+    const nextPreferences = {
+      emailNotifications,
+      communityUpdates,
+      profileVisible,
+      [field]: value,
+    }
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        preferences: nextPreferences,
+        updatedAt: serverTimestamp(),
+      })
+      if (field === 'emailNotifications') setEmailNotifications(value)
+      if (field === 'communityUpdates') setCommunityUpdates(value)
+      if (field === 'profileVisible') setProfileVisible(value)
+      setSaved('Preferences saved.')
+      setTimeout(() => setSaved(''), 2000)
+    } catch (error) {
+      setSecurityError(error instanceof Error ? error.message : 'Could not save this preference.')
+    }
+  }
+
+  const refreshMfaState = async () => {
+    if (auth.currentUser) {
+      await reload(auth.currentUser)
+      setMfaRevision((value) => value + 1)
+    }
+  }
+
+  const runPostReauthAction = async (
+    action: 'password' | 'enroll' | 'disable',
+  ) => {
+    const currentUser = auth.currentUser
+    if (!currentUser) throw new Error('You are no longer signed in. Please sign in again.')
+
+    if (action === 'password') {
+      if (newPassword.length < 8) {
+        throw new Error('Your new password must contain at least 8 characters.')
+      }
+      if (newPassword !== confirmNewPassword) {
+        throw new Error('The new password and confirmation do not match.')
+      }
+      await updatePassword(currentUser, newPassword)
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmNewPassword('')
+      setSecurityMessage('Your password has been updated successfully.')
+      return
+    }
+
+    if (action === 'enroll') {
+      if (!currentUser.emailVerified) {
+        throw new Error('Verify your email address before enabling authenticator-based two-factor authentication.')
+      }
+      const session = await multiFactor(currentUser).getSession()
+      const secret = await TotpMultiFactorGenerator.generateSecret(session)
+      const uri = secret.generateQrCodeUrl(
+        currentUser.email || 'player',
+        'PlayWithNicole',
+      )
+      const qr = await QRCode.toDataURL(uri, {
+        errorCorrectionLevel: 'M',
+        margin: 2,
+        width: 240,
+        color: { dark: '#11111b', light: '#ffffff' },
+      })
+      setTotpSecret(secret)
+      setTotpQrCode(qr)
+      setTotpCode('')
+      setSecurityMessage('Scan the QR code with your authenticator app, then enter the six-digit code to finish setup.')
+      return
+    }
+
+    const factor = multiFactor(currentUser).enrolledFactors.find(
+      (item) => item.factorId === TotpMultiFactorGenerator.FACTOR_ID,
+    )
+    if (!factor) throw new Error('No authenticator app is currently enrolled.')
+    try {
+      await multiFactor(currentUser).unenroll(factor)
+    } catch (unenrollError) {
+      const errorCode =
+        unenrollError && typeof unenrollError === 'object' && 'code' in unenrollError
+          ? String((unenrollError as { code?: unknown }).code)
+          : ''
+
+      // Firebase can expire the current session after the last enrolled
+      // second factor is removed. The factor may already be removed; do not
+      // attempt a stale reload in that case.
+      if (errorCode === 'auth/user-token-expired') {
+        setTotpSecret(null)
+        setTotpQrCode('')
+        setTotpCode('')
+        await auth.signOut().catch(() => undefined)
+        setSecurityMessage('Two-factor authentication was removed. Firebase signed you out for security; please sign in again.')
+        return
+      }
+      throw unenrollError
+    }
+
+    setTotpSecret(null)
+    setTotpQrCode('')
+    setTotpCode('')
+    await refreshMfaState()
+    setSecurityMessage('Two-factor authentication has been disabled.')
+  }
+
+  const reauthenticateForAction = async (
+    action: 'password' | 'enroll' | 'disable',
+  ) => {
+    const currentUser = auth.currentUser
+    if (!currentUser) throw new Error('Please sign in again before changing security settings.')
+
+    setSecurityError('')
+    setSecurityMessage('')
+    setSecurityBusy(true)
+
+    try {
+      if (hasPasswordProvider) {
+        if (!currentPassword) {
+          throw new Error('Enter your current password to confirm this security change.')
+        }
+        if (!currentUser.email) throw new Error('Your account does not have an email address.')
+        const credential = EmailAuthProvider.credential(currentUser.email, currentPassword)
+        await reauthenticateWithCredential(currentUser, credential)
+      } else if (hasGoogleProvider) {
+        await reauthenticateWithPopup(currentUser, new GoogleAuthProvider())
+      } else {
+        throw new Error('This account provider does not support this in-app reauthentication flow.')
+      }
+
+      await runPostReauthAction(action)
+    } catch (error) {
+      const code = error && typeof error === 'object' && 'code' in error
+        ? String((error as { code?: unknown }).code)
+        : ''
+      if (code === 'auth/multi-factor-auth-required') {
+        try {
+          const { getMultiFactorResolver } = await import('firebase/auth')
+          const resolver = getMultiFactorResolver(auth, error as any)
+          const totpHint = resolver.hints.find(
+            (hint) => hint.factorId === TotpMultiFactorGenerator.FACTOR_ID,
+          )
+          if (!totpHint) throw new Error('No authenticator-app factor was returned for this step-up challenge.')
+          setStepUpResolver(resolver)
+          setStepUpAction(action)
+          setStepUpCode('')
+          setSecurityMessage('For your protection, enter a fresh authenticator code to confirm this change.')
+        } catch (resolverError) {
+          setSecurityError(resolverError instanceof Error ? resolverError.message : 'Could not start the additional verification challenge.')
+        }
+      } else {
+        setSecurityError(error instanceof Error ? error.message : 'The security change could not be completed.')
+      }
+    } finally {
+      setSecurityBusy(false)
+    }
+  }
+
+  const finishStepUpChallenge = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!stepUpResolver || !stepUpAction) return
+    if (!/^\d{6}$/.test(stepUpCode)) {
+      setSecurityError('Enter the six-digit code from your authenticator app.')
+      return
+    }
+
+    setSecurityBusy(true)
+    setSecurityError('')
+    try {
+      const factor = stepUpResolver.hints.find(
+        (hint: any) => hint.factorId === TotpMultiFactorGenerator.FACTOR_ID,
+      )
+      if (!factor) throw new Error('The authenticator factor is no longer available.')
+      const assertion = TotpMultiFactorGenerator.assertionForSignIn(factor.uid, stepUpCode)
+      await stepUpResolver.resolveSignIn(assertion)
+      const action = stepUpAction
+      setStepUpResolver(null)
+      setStepUpAction(null)
+      setStepUpCode('')
+      await runPostReauthAction(action)
+    } catch (error) {
+      setSecurityError(error instanceof Error ? error.message : 'The authenticator code could not be verified.')
+    } finally {
+      setSecurityBusy(false)
+    }
+  }
+
+  const confirmTotpEnrollment = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!user || !auth.currentUser || !totpSecret) return
+    if (!/^\d{6}$/.test(totpCode)) {
+      setSecurityError('Enter the six-digit code from your authenticator app.')
+      return
+    }
+
+    setSecurityBusy(true)
+    setSecurityError('')
+    try {
+      const assertion = TotpMultiFactorGenerator.assertionForEnrollment(
+        totpSecret,
+        totpCode,
+      )
+      await multiFactor(auth.currentUser).enroll(assertion, 'Authenticator app')
+      setTotpSecret(null)
+      setTotpQrCode('')
+      setTotpCode('')
+      await refreshMfaState()
+      setSecurityMessage('Two-factor authentication is now enabled for this account.')
+    } catch (error) {
+      setSecurityError(error instanceof Error ? error.message : 'Could not verify the authenticator code.')
+    } finally {
+      setSecurityBusy(false)
+    }
+  }
+
+  const refreshEmailVerification = async () => {
+    if (!auth.currentUser) return
+    setSecurityBusy(true)
+    setSecurityError('')
+    try {
+      await reload(auth.currentUser)
+      setMfaRevision((value) => value + 1)
+      setSecurityMessage(auth.currentUser.emailVerified
+        ? 'Your email address is verified. You can now enable authenticator-based MFA.'
+        : 'Firebase still reports this email as unverified. Open the latest verification email and try again.')
+    } catch (error) {
+      setSecurityError(error instanceof Error ? error.message : 'Could not refresh your email verification status.')
+    } finally {
+      setSecurityBusy(false)
+    }
+  }
+
+  const sendVerificationEmail = async () => {
+    if (!auth.currentUser) return
+    setSecurityBusy(true)
+    setSecurityError('')
+    try {
+      await sendEmailVerification(auth.currentUser)
+      setSecurityMessage('A verification link has been sent to your email address.')
+    } catch (error) {
+      setSecurityError(error instanceof Error ? error.message : 'Could not send the verification email.')
+    } finally {
+      setSecurityBusy(false)
+    }
+  }
+
+  const requestAccountDeletion = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!user?.uid || deleteBusy) return
+
+    const expectedUsername = String(profile?.username || '').trim()
+    if (!expectedUsername) {
+      setSecurityError('Add a username in My Profile before requesting account deletion.')
+      setDeleteModalOpen(false)
+      return
+    }
+    if (deleteUsername.trim() !== expectedUsername) {
+      setSecurityError('The username does not match your profile. No request was sent.')
+      return
+    }
+
+    setDeleteBusy(true)
+    setSecurityError('')
+    try {
+      const conversationRef = doc(db, 'supportConversations', user.uid)
+      const conversationSnapshot = await getDoc(conversationRef)
+      const messageRef = doc(collection(conversationRef, 'messages'))
+      const requestRef = doc(collection(db, 'accountDeletionRequests'))
+      const messageText = `ACCOUNT DELETION REQUEST\nUsername: ${expectedUsername}\nEmail: ${user.email || 'Not available'}\nRequest: Please review and clear my application data. I understand this action cannot be undone.`
+      const batch = writeBatch(db)
+
+      batch.set(messageRef, {
+        senderId: user.uid,
+        senderRole: 'user',
+        type: 'text',
+        text: messageText,
+        imageUrl: '',
+        createdAt: serverTimestamp(),
+      })
+
+      batch.set(
+        conversationRef,
+        {
+          userId: user.uid,
+          status: 'open',
+          lastMessage: 'Account deletion request submitted',
+          lastMessageType: 'text',
+          lastMessageSenderId: user.uid,
+          lastMessageAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          ...(!conversationSnapshot.exists() ? { createdAt: serverTimestamp() } : {}),
+        },
+        { merge: true },
+      )
+
+      batch.set(requestRef, {
+        userId: user.uid,
+        username: expectedUsername,
+        email: user.email || '',
+        status: 'pending',
+        createdAt: serverTimestamp(),
+      })
+
+      await batch.commit()
+      setDeleteModalOpen(false)
+      setDeleteUsername('')
+      setSaved('Your account deletion request has been sent to the Support Team.')
+      setTimeout(() => go('messages'), 650)
+    } catch (error) {
+      console.error('Account deletion request failed:', error)
+      setSecurityError(error instanceof Error ? error.message : 'Could not submit the deletion request. Please contact support.')
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
+
   return (
     <>
       <PageTitle
@@ -4018,14 +4663,14 @@ function Settings({
                 <span>
                   <b>
                     {verified
-                      ? 'Email verified'
-                      : 'Verification status'}
+                      ? 'Verified'
+                      : 'Unverified'}
                   </b>
 
                   <small>
                     {verified
-                      ? 'Your account is verified.'
-                      : 'Your verification status is not confirmed.'}
+                      ? 'Your profile has been verified by the Support Team.'
+                      : 'Your profile has not been verified yet.'}
                   </small>
                 </span>
               </div>
@@ -4046,9 +4691,9 @@ function Settings({
 
               <hr />
 
-              <small>Account role</small>
-              <strong>
-                {profile?.role || 'player'}
+              <small>Verification status</small>
+              <strong className={verified ? 'profileStatusText verified' : 'profileStatusText unverified'}>
+                {verified ? 'Verified' : 'Unverified'}
               </strong>
 
               <small>
@@ -4201,118 +4846,222 @@ function Settings({
         </>
       ) : (
         <div className="settingsLayout">
-          <div className="panel">
-            <h3 className="panelTitle">
-              Password &amp; security
-            </h3>
+          <div className="panel settingsSecurityPanel">
+            <h3 className="panelTitle">Password &amp; security</h3>
 
-            <form
-              className="passwordForm"
-              onSubmit={(event) => {
-                event.preventDefault()
-                save(
-                  'Password changes must be completed through your authentication provider.',
-                )
-              }}
-            >
-              <label>
-                Current password
-
-                <input
-                  required
-                  type="password"
-                  placeholder="Enter current password"
-                />
-              </label>
-
-              <div className="formGrid">
-                <label>
-                  New password
-
-                  <input
-                    required
-                    minLength={8}
-                    type="password"
-                    placeholder="At least 8 characters"
-                  />
-                </label>
-
-                <label>
-                  Confirm password
-
-                  <input
-                    required
-                    minLength={8}
-                    type="password"
-                    placeholder="Repeat new password"
-                  />
-                </label>
-              </div>
-
-              <Button type="submit">
-                Update password
-              </Button>
-            </form>
-
-            <h3 className="panelTitle sectionTitle">
-              Preferences
-            </h3>
-
-            {[
-              'Email notifications',
-              'Community updates',
-              'Profile visibility',
-              'Two-factor authentication',
-            ].map((item, index) => (
-              <div className="settingRow" key={item}>
-                <span>
-                  <Icon
-                    name={index === 3 ? 'shield' : 'bell'}
-                  />
-                </span>
-
+            {isGoogleOnlyAccount ? (
+              <div className="googleSecurityNotice">
+                <span className="googleSecurityIcon">G</span>
                 <div>
-                  <b>{item}</b>
+                  <b>This account uses Google sign-in</b>
+                  <p>Your password is managed securely by Google. There is no separate PlayWithNicole password to change.</p>
+                  <a href="https://myaccount.google.com/security" target="_blank" rel="noreferrer">Manage your Google Account security ↗</a>
+                </div>
+              </div>
+            ) : hasPasswordProvider ? (
+              <form
+                className="passwordForm"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  void reauthenticateForAction('password')
+                }}
+              >
+                <label>
+                  Current password
+                  <input
+                    required
+                    type="password"
+                    autoComplete="current-password"
+                    value={currentPassword}
+                    onChange={(event) => setCurrentPassword(event.target.value)}
+                    placeholder="Enter your current password"
+                  />
+                </label>
 
-                  <p>
-                    {index === 3
-                      ? 'Add an extra layer of account security.'
-                      : 'Choose how this preference behaves.'}
-                  </p>
+                <div className="formGrid">
+                  <label>
+                    New password
+                    <input
+                      required
+                      minLength={8}
+                      type="password"
+                      autoComplete="new-password"
+                      value={newPassword}
+                      onChange={(event) => setNewPassword(event.target.value)}
+                      placeholder="At least 8 characters"
+                    />
+                  </label>
+
+                  <label>
+                    Confirm new password
+                    <input
+                      required
+                      minLength={8}
+                      type="password"
+                      autoComplete="new-password"
+                      value={confirmNewPassword}
+                      onChange={(event) => setConfirmNewPassword(event.target.value)}
+                      placeholder="Repeat your new password"
+                    />
+                  </label>
                 </div>
 
-                <button
-                  className={`toggle ${
-                    toggles[index] ? 'active' : ''
-                  }`}
-                  aria-label={`Toggle ${item}`}
-                  type="button"
-                  onClick={() =>
-                    setToggles((current) =>
-                      current.map((value, currentIndex) =>
-                        currentIndex === index
-                          ? !value
-                          : value,
-                      ),
-                    )
-                  }
-                >
-                  <i />
-                </button>
+                <Button type="submit" disabled={securityBusy}>
+                  {securityBusy ? 'Updating...' : 'Update password'}
+                </Button>
+              </form>
+            ) : (
+              <div className="googleSecurityNotice">
+                <span className="googleSecurityIcon"><Icon name="shield" /></span>
+                <div>
+                  <b>Password change is not available for this provider</b>
+                  <p>Your account does not currently have an email/password sign-in method linked.</p>
+                </div>
               </div>
-            ))}
+            )}
 
-            <button
-              className="danger"
-              type="button"
-              onClick={() =>
-                confirm(
-                  'Request account deletion? This is a UI placeholder only.',
-                )
-              }
-            >
-              Request account deletion
-            </button>
+            <div className="securityFeedback" aria-live="polite">
+              {securityMessage && <p className="securitySuccess"><Icon name="check-circle" size={15} /> {securityMessage}</p>}
+              {securityError && <p className="securityError"><Icon name="alert-circle" size={15} /> {securityError}</p>}
+            </div>
+
+            {!user?.emailVerified && (
+              <div className="emailVerificationNotice">
+                <div>
+                  <b>Email verification required for TOTP</b>
+                  <p>Firebase requires a verified email address before an authenticator app can be enrolled.</p>
+                </div>
+                <div className="emailVerificationActions">
+                  <button type="button" onClick={() => void sendVerificationEmail()} disabled={securityBusy}>
+                    Send verification email
+                  </button>
+                  <button type="button" onClick={() => void refreshEmailVerification()} disabled={securityBusy}>
+                    I've verified my email
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <h3 className="panelTitle sectionTitle">Preferences</h3>
+
+            <div className="settingRow">
+              <span><Icon name="mail" /></span>
+              <div>
+                <b>Email notifications</b>
+                <p>Receive account and support updates by email when available.</p>
+              </div>
+              <button className={`toggle ${emailNotifications ? 'active' : ''}`} aria-label="Toggle email notifications" aria-pressed={emailNotifications} type="button" onClick={() => void updatePreference('emailNotifications', !emailNotifications)}>
+                <i />
+              </button>
+            </div>
+
+            <div className="settingRow">
+              <span><Icon name="users" /></span>
+              <div>
+                <b>Community updates</b>
+                <p>Show community-related announcements in your account.</p>
+              </div>
+              <button className={`toggle ${communityUpdates ? 'active' : ''}`} aria-label="Toggle community updates" aria-pressed={communityUpdates} type="button" onClick={() => void updatePreference('communityUpdates', !communityUpdates)}>
+                <i />
+              </button>
+            </div>
+
+            <div className="settingRow">
+              <span><Icon name="eye" /></span>
+              <div>
+                <b>Profile visibility</b>
+                <p>Allow your profile to be visible within the community.</p>
+              </div>
+              <button className={`toggle ${profileVisible ? 'active' : ''}`} aria-label="Toggle profile visibility" aria-pressed={profileVisible} type="button" onClick={() => void updatePreference('profileVisible', !profileVisible)}>
+                <i />
+              </button>
+            </div>
+
+            <div className="totpSecurityCard">
+              <div className="totpSecurityHead">
+                <span className="totpSecurityIcon"><Icon name="shield-check" size={20} /></span>
+                <div>
+                  <b>Authenticator app two-factor authentication</b>
+                  <p>Protect sign-in with a time-based one-time password (TOTP).</p>
+                </div>
+                <span className={`securityStatusPill ${enrolledTotpFactor ? 'enabled' : 'disabled'}`}>
+                  {enrolledTotpFactor ? 'Enabled' : 'Not enabled'}
+                </span>
+              </div>
+
+              {stepUpResolver && stepUpAction ? (
+                <form className="stepUpForm" onSubmit={finishStepUpChallenge}>
+                  <b>Additional verification required</b>
+                  <p>Enter a fresh code from your authenticator app to continue this security change.</p>
+                  <label>
+                    Six-digit authenticator code
+                    <input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={stepUpCode} onChange={(event) => setStepUpCode(event.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="000000" required />
+                  </label>
+                  <Button type="submit" disabled={securityBusy || stepUpCode.length !== 6}>{securityBusy ? 'Verifying...' : 'Confirm security change'}</Button>
+                </form>
+              ) : enrolledTotpFactor ? (
+                <div className="totpEnabledState">
+                  <p><Icon name="check-circle" size={16} /> Your account requires an authenticator code after your password or Google sign-in.</p>
+                  <p className="helper">Factor: {enrolledTotpFactor.displayName || 'Authenticator app'}</p>
+                  <button type="button" className="danger securityDangerButton" disabled={securityBusy} onClick={() => void reauthenticateForAction('disable')}>
+                    {securityBusy ? 'Please wait...' : 'Disable two-factor authentication'}
+                  </button>
+                </div>
+              ) : totpSecret && totpQrCode ? (
+                <form className="totpEnrollmentForm" onSubmit={confirmTotpEnrollment}>
+                  <div className="totpQrWrap">
+                    <img src={totpQrCode} alt="Scan this QR code with your authenticator app" />
+                    <div>
+                      <b>1. Scan this QR code</b>
+                      <p>Use Google Authenticator, Microsoft Authenticator, 1Password, or another TOTP-compatible app.</p>
+                      <small>Can't scan? Enter this setup key manually:</small>
+                      <code>{totpSecret.secretKey}</code>
+                    </div>
+                  </div>
+                  <label>
+                    2. Enter the six-digit authenticator code
+                    <input
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      pattern="[0-9]{6}"
+                      maxLength={6}
+                      required
+                      value={totpCode}
+                      onChange={(event) => setTotpCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="000000"
+                    />
+                  </label>
+                  <div className="totpActions">
+                    <Button type="submit" disabled={securityBusy || totpCode.length !== 6}>{securityBusy ? 'Verifying...' : 'Verify and enable MFA'}</Button>
+                    <button type="button" onClick={() => { setTotpSecret(null); setTotpQrCode(''); setTotpCode('') }}>Cancel setup</button>
+                  </div>
+                </form>
+              ) : (
+                <div className="totpNotEnabledState">
+                  <p>When enabled, users must enter a current code from their authenticator app at sign-in. Firebase securely validates the code; the TOTP secret is not stored in Firestore.</p>
+                  {hasPasswordProvider && (
+                    <label className="totpReauthField">
+                      Current password
+                      <input type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} placeholder="Confirm your password" />
+                    </label>
+                  )}
+                  <Button type="button" disabled={securityBusy || !user?.emailVerified} onClick={() => void reauthenticateForAction('enroll')}>
+                    {securityBusy ? 'Preparing setup...' : 'Set up authenticator app'}
+                  </Button>
+                  {!user?.emailVerified && <small className="helper">Verify your email address first to enable TOTP.</small>}
+                </div>
+              )}
+            </div>
+
+            <div className="accountDeletionCard">
+              <div>
+                <b>Request account deletion</b>
+                <p>Your request will be sent to the Support Team for admin review. Your Firebase Authentication account will not be deleted automatically.</p>
+              </div>
+              <button className="danger" type="button" onClick={() => { setDeleteUsername(''); setDeleteModalOpen(true) }}>
+                Request account deletion
+              </button>
+            </div>
           </div>
 
           <aside className="profileSide">
@@ -4327,15 +5076,34 @@ function Settings({
               </span>
             </div>
 
-            <Button
-              secondary
-              onClick={() =>
-                save('Other sessions signed out')
-              }
-            >
-              Sign out other sessions
-            </Button>
+            <small className="sessionSecurityNote">
+              Session revocation for every device requires a trusted Firebase Admin operation. Your current session is managed by Firebase Authentication.
+            </small>
           </aside>
+        </div>
+      )}
+
+      {deleteModalOpen && (
+        <div className="confirmationOverlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDeleteModalOpen(false) }}>
+          <form className="confirmationModal" onSubmit={requestAccountDeletion} role="dialog" aria-modal="true" aria-labelledby="deleteAccountTitle">
+            <span className="confirmationDangerIcon"><Icon name="trash-2" size={22} /></span>
+            <h2 id="deleteAccountTitle">Are you sure?</h2>
+            <p>This action cannot be undone. Your request will be sent to the Support Team, who will review and clear your application data.</p>
+            {!profile?.username ? (
+              <div className="supportChatError">No username is saved on your profile. Add a username in My Profile before submitting this request.</div>
+            ) : (
+              <label>
+                Type <b>{profile.username}</b> to confirm
+                <input autoFocus value={deleteUsername} onChange={(event) => setDeleteUsername(event.target.value)} placeholder="Enter your username" autoComplete="off" />
+              </label>
+            )}
+            <div className="confirmationActions">
+              <button type="button" className="confirmationCancel" onClick={() => setDeleteModalOpen(false)} disabled={deleteBusy}>Cancel</button>
+              <button type="submit" className="confirmationSubmit" disabled={deleteBusy || !profile?.username || deleteUsername.trim() !== String(profile.username).trim()}>
+                {deleteBusy ? 'Sending request...' : 'Confirm request'}
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </>
