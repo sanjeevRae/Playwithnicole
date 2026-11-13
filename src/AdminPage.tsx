@@ -61,6 +61,7 @@ type AdminUser = {
   name: string
   username: string
   email: string
+  phoneNumber: string
   photoURL: string
   role: string
   verified: 0 | 1
@@ -1847,6 +1848,10 @@ function AdminUserManagement() {
                 typeof data.email === 'string'
                   ? data.email
                   : '',
+              phoneNumber:
+                typeof data.phoneNumber === 'string'
+                  ? data.phoneNumber.trim()
+                  : '',
               photoURL: getUserPhoto(data),
               role: getUserRole(data),
               verified: getUserVerified(data),
@@ -2133,6 +2138,7 @@ function AdminUserManagement() {
     return [
       user.name,
       user.email,
+      user.phoneNumber,
       user.id,
       user.role,
     ]
@@ -2252,8 +2258,8 @@ function AdminUserManagement() {
               onChange={(event) =>
                 setSearch(event.target.value)
               }
-              placeholder="Search by name or email..."
-              aria-label="Search users by name or email"
+              placeholder="Search name, email, or phone..."
+              aria-label="Search users by name, email, or phone number"
             />
 
             {search && (
@@ -2371,6 +2377,10 @@ function AdminUserManagement() {
                         <small>
                           {user.email ||
                             'No email available'}
+                        </small>
+
+                        <small className="adminUserPhone">
+                          {user.phoneNumber || 'No phone number provided'}
                         </small>
 
                         <span className="adminUserId">
@@ -2720,6 +2730,11 @@ export function AdminPage({
               email:
                 typeof data.email === 'string'
                   ? data.email
+                  : '',
+
+              phoneNumber:
+                typeof data.phoneNumber === 'string'
+                  ? data.phoneNumber.trim()
                   : '',
 
               photoURL: getUserPhoto(data),
@@ -4840,6 +4855,9 @@ export function AdminPage({
                   <small>
                     {user.email ||
                       `Joined ${formatUserJoinedDate(user.createdAt)}`}
+                  </small>
+                  <small className="adminOverviewPhone">
+                    {user.phoneNumber || 'No phone number provided'}
                   </small>
                 </div>
 

@@ -38,6 +38,9 @@ type UserProfile = DocumentData & {
   displayName: string | null
   photoURL: string | null
   username?: string
+  phoneNumber?: string
+  phoneCountryCode?: string
+  phoneCountryName?: string
   role: string
   createdAt: any
   updatedAt: any
@@ -55,6 +58,9 @@ type AuthContextType = {
     password: string,
     displayName: string,
     username: string,
+    phoneNumber: string,
+    phoneCountryCode: string,
+    phoneCountryName: string,
   ) => Promise<void>
   signIn: (email: string, password: string) => Promise<boolean>
   signInWithGoogle: () => Promise<boolean>
@@ -344,6 +350,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       existingData.username ||
       additionalData.username ||
       ''
+    const nextPhoneNumber =
+      typeof additionalData.phoneNumber === 'string'
+        ? additionalData.phoneNumber
+        : typeof existingData.phoneNumber === 'string'
+          ? existingData.phoneNumber
+          : ''
+    const nextPhoneCountryCode =
+      typeof additionalData.phoneCountryCode === 'string'
+        ? additionalData.phoneCountryCode
+        : typeof existingData.phoneCountryCode === 'string'
+          ? existingData.phoneCountryCode
+          : ''
+    const nextPhoneCountryName =
+      typeof additionalData.phoneCountryName === 'string'
+        ? additionalData.phoneCountryName
+        : typeof existingData.phoneCountryName === 'string'
+          ? existingData.phoneCountryName
+          : ''
     const nextRole = existingData.role ?? additionalData.role ?? 'user'
 
     const profileForState: UserProfile = {
@@ -353,6 +377,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       displayName: nextDisplayName,
       photoURL: nextPhotoURL,
       username: nextUsername,
+      ...(nextPhoneNumber ? { phoneNumber: nextPhoneNumber } : {}),
+      ...(nextPhoneCountryCode ? { phoneCountryCode: nextPhoneCountryCode } : {}),
+      ...(nextPhoneCountryName ? { phoneCountryName: nextPhoneCountryName } : {}),
       role: nextRole,
       createdAt: existingData.createdAt ?? additionalData.createdAt ?? null,
       updatedAt: existingData.updatedAt ?? null,
@@ -374,6 +401,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (nextUsername !== existingData.username) {
         allowedUpdates.username = nextUsername
       }
+      if (nextPhoneNumber && nextPhoneNumber !== existingData.phoneNumber) {
+        allowedUpdates.phoneNumber = nextPhoneNumber
+      }
+      if (nextPhoneCountryCode && nextPhoneCountryCode !== existingData.phoneCountryCode) {
+        allowedUpdates.phoneCountryCode = nextPhoneCountryCode
+      }
+      if (nextPhoneCountryName && nextPhoneCountryName !== existingData.phoneCountryName) {
+        allowedUpdates.phoneCountryName = nextPhoneCountryName
+      }
       await setDoc(userRef, allowedUpdates, { merge: true })
       setProfile({ ...profileForState, updatedAt: new Date() })
     } else {
@@ -383,6 +419,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         displayName: nextDisplayName,
         photoURL: nextPhotoURL,
         username: nextUsername,
+        ...(nextPhoneNumber ? { phoneNumber: nextPhoneNumber } : {}),
+        ...(nextPhoneCountryCode ? { phoneCountryCode: nextPhoneCountryCode } : {}),
+        ...(nextPhoneCountryName ? { phoneCountryName: nextPhoneCountryName } : {}),
         role: nextRole,
         emailVerified: false,
         createdAt: serverTimestamp(),
@@ -424,15 +463,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string,
     displayName: string,
     username: string,
+    phoneNumber: string,
+    phoneCountryCode: string,
+    phoneCountryName: string,
   ) => {
     const cleanUsername = username.trim().replace(/^@/, '')
     if (!/^[a-zA-Z0-9_.]{3,24}$/.test(cleanUsername)) {
       throw new Error('Username must be 3–24 characters and can contain letters, numbers, underscores, and periods.')
     }
+    const cleanPhoneNumber = phoneNumber.replace(/\s/g, '')
+    if (!/^\+[1-9]\d{7,14}$/.test(cleanPhoneNumber)) {
+      throw new Error('Enter a valid international phone number, including its country calling code.')
+    }
+    if (!/^\+[1-9]\d{0,3}$/.test(phoneCountryCode) || !phoneCountryName.trim()) {
+      throw new Error('Choose a valid country calling code.')
+    }
     setLoading(true)
     const initialSignupProfile: Partial<UserProfile> = {
       displayName: displayName.trim(),
       username: cleanUsername,
+      phoneNumber: cleanPhoneNumber,
+      phoneCountryCode,
+      phoneCountryName: phoneCountryName.trim(),
       role: 'user',
     }
     pendingSignupProfileRef.current = initialSignupProfile

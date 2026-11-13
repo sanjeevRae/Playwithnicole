@@ -40,6 +40,7 @@ import {
 } from 'firebase/auth'
 import QRCode from 'qrcode'
 import { AdminPage } from './AdminPage'
+import { PHONE_COUNTRIES, getCountryFlag } from './data/phoneCountries'
 
 // ==========================================
 // GENERAL CONFIGURATION
@@ -818,6 +819,12 @@ export const Icon = ({
     close: (
       <>
         <path d="m6 6 12 12M18 6 6 18" />
+      </>
+    ),
+
+    'chevron-down': (
+      <>
+        <path d="m6 9 6 6 6-6" />
       </>
     ),
 
@@ -2094,6 +2101,19 @@ function AuthModal({
   const [password, setPassword] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [username, setUsername] = useState('')
+  const [phoneCountryIso, setPhoneCountryIso] = useState('NP')
+  const [phoneNationalNumber, setPhoneNationalNumber] = useState('')
+  const [showPhoneCountryList, setShowPhoneCountryList] = useState(false)
+  const [phoneCountrySearch, setPhoneCountrySearch] = useState('')
+  const selectedPhoneCountry =
+    PHONE_COUNTRIES.find((country) => country.iso2 === phoneCountryIso) ??
+    PHONE_COUNTRIES.find((country) => country.iso2 === 'NP') ??
+    PHONE_COUNTRIES[0]!
+  const filteredPhoneCountries = PHONE_COUNTRIES.filter((country) =>
+    `${country.name} ${country.dialCode}`
+      .toLowerCase()
+      .includes(phoneCountrySearch.trim().toLowerCase()),
+  )
   const [showPassword, setShowPassword] = useState(false)
   const [authError, setAuthError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -2220,11 +2240,22 @@ function AuthModal({
                       return
                     }
                   } else if (mode === 'signup') {
+                    const nationalDigits = phoneNationalNumber.replace(/\D/g, '')
+                    const fullPhoneNumber = `${selectedPhoneCountry.dialCode}${nationalDigits}`
+                    const internationalDigits = fullPhoneNumber.replace(/\D/g, '')
+
+                    if (nationalDigits.length < 4 || internationalDigits.length < 8 || internationalDigits.length > 15) {
+                      throw new Error('Enter a valid phone number for the selected country (8–15 digits including the country code).')
+                    }
+
                     await signUp(
                       email,
                       password,
                       displayName,
                       username,
+                      fullPhoneNumber,
+                      selectedPhoneCountry.dialCode,
+                      selectedPhoneCountry.name,
                     )
                   } else if (mode === 'forgot') {
                     await resetPassword(email)
@@ -2276,6 +2307,97 @@ function AuthModal({
                     />
                   </label>
                 </div>
+              )}
+
+              {mode === 'signup' && (
+                <label className="phoneFieldLabel">
+                  Phone number
+                  <div className="phoneInputGroup">
+                    <div
+                      className="phoneCountryPicker"
+                      onBlur={(event) => {
+                        const nextFocus = event.relatedTarget as Node | null
+                        if (!nextFocus || !event.currentTarget.contains(nextFocus)) {
+                          setShowPhoneCountryList(false)
+                        }
+                      }}
+                    >
+                      <button
+                        className="phoneCountryTrigger"
+                        type="button"
+                        aria-label={`Country calling code ${selectedPhoneCountry.dialCode}, ${selectedPhoneCountry.name}`}
+                        aria-expanded={showPhoneCountryList}
+                        onClick={() => {
+                          setPhoneCountrySearch('')
+                          setShowPhoneCountryList((current) => !current)
+                        }}
+                      >
+                        <span className="phoneCountryFlag">
+                          {getCountryFlag(selectedPhoneCountry.iso2)}
+                        </span>
+                        <b>{selectedPhoneCountry.dialCode}</b>
+                        <Icon name="chevron-down" size={14} />
+                      </button>
+
+                      {showPhoneCountryList && (
+                        <div className="phoneCountryDropdown">
+                          <input
+                            className="phoneCountrySearch"
+                            type="search"
+                            autoFocus
+                            value={phoneCountrySearch}
+                            onChange={(event) => setPhoneCountrySearch(event.target.value)}
+                            placeholder="Search country or code..."
+                            aria-label="Search countries and calling codes"
+                          />
+                          <div className="phoneCountryOptions" role="listbox" aria-label="Countries">
+                            {filteredPhoneCountries.length > 0 ? (
+                              filteredPhoneCountries.map((country) => (
+                                <button
+                                  key={country.iso2}
+                                  type="button"
+                                  role="option"
+                                  aria-selected={country.iso2 === phoneCountryIso}
+                                  className={country.iso2 === phoneCountryIso ? 'isSelected' : ''}
+                                  onClick={() => {
+                                    setPhoneCountryIso(country.iso2)
+                                    setPhoneCountrySearch('')
+                                    setShowPhoneCountryList(false)
+                                  }}
+                                >
+                                  <span>{getCountryFlag(country.iso2)}</span>
+                                  <span>{country.name}</span>
+                                  <b>{country.dialCode}</b>
+                                </button>
+                              ))
+                            ) : (
+                              <small className="phoneCountryNoResults">No countries match that search.</small>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <input
+                      className="phoneNationalInput"
+                      type="tel"
+                      name="phone"
+                      autoComplete="tel-national"
+                      inputMode="tel"
+                      required
+                      minLength={4}
+                      maxLength={18}
+                      value={phoneNationalNumber}
+                      onChange={(event) =>
+                        setPhoneNationalNumber(
+                          event.target.value.replace(/[^0-9\s().-]/g, '').slice(0, 18),
+                        )
+                      }
+                      placeholder="Your phone number"
+                    />
+                  </div>
+                  
+                </label>
               )}
 
               <label>

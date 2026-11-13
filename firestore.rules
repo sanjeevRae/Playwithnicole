@@ -81,6 +81,22 @@ service cloud.firestore {
           request.resource.data.verified == 0);
     }
 
+    // Optional for existing/Google-created profiles, but validated whenever
+    // a phone number is provided during signup. The client stores it in E.164.
+    function safeInitialPhoneProfile() {
+      return (!('phoneNumber' in request.resource.data) ||
+          (request.resource.data.phoneNumber is string &&
+            (request.resource.data.phoneNumber == '' ||
+              request.resource.data.phoneNumber.matches('^[+][1-9][0-9]{7,14}$')))) &&
+        (!('phoneCountryCode' in request.resource.data) ||
+          (request.resource.data.phoneCountryCode is string &&
+            (request.resource.data.phoneCountryCode == '' ||
+              request.resource.data.phoneCountryCode.matches('^[+][1-9][0-9]{0,3}$')))) &&
+        (!('phoneCountryName' in request.resource.data) ||
+          (request.resource.data.phoneCountryName is string &&
+            request.resource.data.phoneCountryName.size() <= 80));
+    }
+
     // Email verification is managed by Firebase Authentication. A user may
     // create an unverified profile, but can only promote emailVerified after
     // Firebase places email_verified=true in the signed-in ID token.
@@ -103,6 +119,9 @@ service cloud.firestore {
           'username',
           'bio',
           'photoURL',
+          'phoneNumber',
+          'phoneCountryCode',
+          'phoneCountryName',
           'preferences',
           'updatedAt',
           'emailVerified'
@@ -123,6 +142,17 @@ service cloud.firestore {
         (!('photoURL' in request.resource.data) ||
           (request.resource.data.photoURL is string &&
             request.resource.data.photoURL.size() <= 2048)) &&
+        (!('phoneNumber' in request.resource.data) ||
+          (request.resource.data.phoneNumber is string &&
+            (request.resource.data.phoneNumber == '' ||
+              request.resource.data.phoneNumber.matches('^[+][1-9][0-9]{7,14}$')))) &&
+        (!('phoneCountryCode' in request.resource.data) ||
+          (request.resource.data.phoneCountryCode is string &&
+            (request.resource.data.phoneCountryCode == '' ||
+              request.resource.data.phoneCountryCode.matches('^[+][1-9][0-9]{0,3}$')))) &&
+        (!('phoneCountryName' in request.resource.data) ||
+          (request.resource.data.phoneCountryName is string &&
+            request.resource.data.phoneCountryName.size() <= 80)) &&
         (!('updatedAt' in request.resource.data) ||
           request.resource.data.updatedAt is timestamp) &&
         (
@@ -245,7 +275,8 @@ service cloud.firestore {
         safeInitialAdminFlag() &&
         safeInitialAdminRoleFlag() &&
         safeInitialVerification() &&
-        safeInitialEmailVerification()
+        safeInitialEmailVerification() &&
+        safeInitialPhoneProfile()
       );
 
       // Users can update only their profile fields.
