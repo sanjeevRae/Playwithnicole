@@ -902,14 +902,24 @@ export const Icon = ({
   )
 }
 
-export const Logo = () => (
+export const Logo = ({
+  onClick,
+}: {
+  onClick?: () => void
+}) => (
   <button
     className="logo"
-    onClick={() => window.location.reload()}
+    onClick={onClick}
     type="button"
+    aria-label="Go to playwithnicole homepage"
   >
     <span className="logoMark">
-      <img src="/logo.png" alt="Logo" style={{ width: 24, height: 24, objectFit: "contain" }} />
+      <img
+        src="/logo.png"
+        alt=""
+        aria-hidden="true"
+        style={{ width: 24, height: 24, objectFit: 'contain' }}
+      />
     </span>
     <span>
       playwith<b>nicole</b>
@@ -971,14 +981,20 @@ const ProfileAvatar = ({
   const verified = profile?.verified === 1 || profile?.verified === true
 
   return (
-    <div
-      className="profileMenu"
-      onClick={(event) => {
-        event.stopPropagation()
-        setOpen((current) => !current)
-      }}
-    >
-      <div className="profileHeader">
+    <div className="profileMenu">
+      <div
+        className="profileHeader"
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            setOpen((current) => !current)
+          }
+        }}
+      >
         <span>
           {photo && !imageError ? (
             <img
@@ -1004,6 +1020,17 @@ const ProfileAvatar = ({
 
       {open && (
         <div className="profileDropdown">
+          <button
+            className="dropdownItem"
+            type="button"
+            onClick={() => {
+              setOpen(false)
+              go('dashboard')
+            }}
+          >
+            <Icon name="grid" /> My Dashboard
+          </button>
+
           <button
             className="dropdownItem"
             type="button"
@@ -1056,6 +1083,7 @@ function Home({
   const { user, profile, signOut } = useAuth()
 
   const [menu, setMenu] = useState(false)
+  const [featuredPage, setFeaturedPage] = useState(0)
 
   const [heroBanner, setHeroBanner] =
     useState<PublicHeroBanner>(DEFAULT_PUBLIC_HERO)
@@ -1069,6 +1097,27 @@ function Home({
     games: featuredGames,
     loading: featuredGamesLoading,
   } = usePublishedGames()
+
+  // Keep the homepage carousel data-driven while limiting its scope
+  // to three batches of four published games (12 total).
+  const featuredGamesForCarousel = featuredGames.slice(0, 12)
+  const featuredPageCount = Math.ceil(
+    featuredGamesForCarousel.length / 4,
+  )
+  const activeFeaturedPage = Math.min(
+    featuredPage,
+    Math.max(0, featuredPageCount - 1),
+  )
+  const featuredPageGames = featuredGamesForCarousel.slice(
+    activeFeaturedPage * 4,
+    activeFeaturedPage * 4 + 4,
+  )
+
+  useEffect(() => {
+    setFeaturedPage((current) =>
+      Math.min(current, Math.max(0, featuredPageCount - 1)),
+    )
+  }, [featuredPageCount])
 
   useEffect(() => {
     const activeHeroQuery = query(
@@ -1148,6 +1197,17 @@ function Home({
     return unsubscribe
   }, [])
 
+  const handleGamesNavigation = () => {
+    setMenu(false)
+
+    if (!user) {
+      auth('login')
+      return
+    }
+
+    go('games')
+  }
+
   const handleHeroAction = (
     target: string,
     fallback: 'games' | 'signup',
@@ -1164,7 +1224,7 @@ function Home({
     }
 
     if (!destination || destination === '#games') {
-      go('games')
+      handleGamesNavigation()
       return
     }
 
@@ -1198,7 +1258,7 @@ function Home({
     if (fallback === 'signup' && !user) {
       auth('signup')
     } else {
-      go('games')
+      handleGamesNavigation()
     }
   }
 
@@ -1216,32 +1276,199 @@ function Home({
 
   return (
     <div className="public">
+      <style>{`
+        .public #games .featuredGamesGrid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 18px;
+        }
+
+        .public #games .featuredGamesGrid .gameCard,
+        .public #games .featuredGamesGrid .gameCard.g2 {
+          display: block;
+          min-width: 0;
+          width: auto;
+          height: 390px;
+        }
+
+        .featuredGamesPagination {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 22px;
+          margin-top: 26px;
+        }
+
+        .featuredPageButton {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          min-height: 38px;
+          padding: 8px 12px;
+          border: 1px solid var(--line);
+          border-radius: 9px;
+          color: var(--text);
+          font-size: 12px;
+          transition: border-color .2s, opacity .2s, background .2s;
+        }
+
+        .featuredPageButton:hover:not(:disabled) {
+          border-color: rgba(168, 132, 255, .65);
+          background: rgba(139, 92, 246, .1);
+        }
+
+        .featuredPageButton:disabled {
+          opacity: .35;
+          cursor: not-allowed;
+        }
+
+        .featuredPrevIcon {
+          display: inline-flex;
+          transform: rotate(180deg);
+        }
+
+        .featuredGameDots {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 9px;
+        }
+
+        .featuredGameDot {
+          width: 8px;
+          height: 8px;
+          padding: 0;
+          border: 1px solid rgba(255, 255, 255, .55);
+          border-radius: 999px;
+          background: transparent;
+          transition: width .2s, background .2s, border-color .2s;
+        }
+
+        .featuredGameDot.active {
+          width: 23px;
+          border-color: #a884ff;
+          background: #a884ff;
+        }
+
+        .community .activityCard .discord {
+          position: static;
+          display: flex;
+          width: 100%;
+          min-width: 0;
+          min-height: 44px;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          box-sizing: border-box;
+          margin: 16px 0 0;
+          line-height: 1.45;
+          text-align: left;
+          white-space: normal;
+        }
+
+        .community .activityCard a.discord:hover {
+          border-color: rgba(168, 132, 255, .6);
+          background: rgba(255, 255, 255, .04);
+        }
+
+        @media (max-width: 900px) {
+          .public #games .featuredGamesGrid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+
+          .public #games .featuredGamesGrid .gameCard,
+          .public #games .featuredGamesGrid .gameCard.g2 {
+            display: block;
+            height: 360px;
+          }
+        }
+
+        @media (max-width: 600px) {
+          .public #games .featuredGamesGrid {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr);
+            overflow: visible;
+          }
+
+          .public #games .featuredGamesGrid .gameCard,
+          .public #games .featuredGamesGrid .gameCard.g2 {
+            display: block;
+            width: 100%;
+            min-width: 0;
+            height: 340px;
+          }
+
+          .featuredGamesPagination {
+            gap: 10px;
+          }
+
+          .featuredPageButton {
+            gap: 5px;
+            padding: 8px;
+            font-size: 11px;
+          }
+
+          .public #games .sectionHead {
+            align-items: flex-start;
+            flex-direction: column;
+            gap: 12px;
+          }
+
+          .public #games .sectionHead .link {
+            display: flex;
+            align-self: flex-end;
+            white-space: nowrap;
+          }
+        }
+      `}</style>
+
       <nav className="topnav">
-        <Logo />
+        <Logo onClick={() => { setMenu(false); go('home') }} />
 
         <div className={`navlinks ${menu ? 'open' : ''}`}>
-          <button onClick={() => go('home')} type="button">
+          <button
+            onClick={() => {
+              setMenu(false)
+              go('home')
+            }}
+            type="button"
+          >
             Home
           </button>
 
-          <button onClick={() => go('games')} type="button">
+          <button onClick={handleGamesNavigation} type="button">
             Games
           </button>
 
+          {user && (
+            <button
+              onClick={() => {
+                setMenu(false)
+                go('dashboard')
+              }}
+              type="button"
+            >
+              Dashboard
+            </button>
+          )}
+
           <button
             type="button"
-            onClick={() =>
+            onClick={() => {
+              setMenu(false)
               document.querySelector('#about')?.scrollIntoView()
-            }
+            }}
           >
             About
           </button>
 
           <button
             type="button"
-            onClick={() =>
+            onClick={() => {
+              setMenu(false)
               document.querySelector('#faq')?.scrollIntoView()
-            }
+            }}
           >
             FAQ
           </button>
@@ -1369,7 +1596,7 @@ function Home({
 
             <button
               className="link"
-              onClick={() => go('games')}
+              onClick={handleGamesNavigation}
               type="button"
             >
               View all games <Icon name="arrow" size={16} />
@@ -1386,8 +1613,9 @@ function Home({
               <p>No published games are available yet.</p>
             </div>
           ) : (
-            <div className="gameGrid">
-              {featuredGames.slice(0, 3).map((game, index) => (
+            <>
+              <div className="gameGrid featuredGamesGrid">
+                {featuredPageGames.map((game, index) => (
                 <article
                   className={`gameCard g${index}`}
                   key={game.id}
@@ -1395,6 +1623,7 @@ function Home({
                   <img
                     src={game.image || hero}
                     alt={game.title}
+                    loading="lazy"
                   />
 
                   <div className="gameOverlay" />
@@ -1413,14 +1642,73 @@ function Home({
 
                     <button
                       type="button"
-                      onClick={() => go('games')}
+                      onClick={handleGamesNavigation}
                     >
                       Explore game <span>→</span>
                     </button>
                   </div>
                 </article>
-              ))}
-            </div>
+                ))}
+              </div>
+
+              {featuredPageCount > 1 && (
+              <div
+                className="featuredGamesPagination"
+                aria-label="Featured games pagination"
+              >
+                <button
+                  className="featuredPageButton"
+                  type="button"
+                  onClick={() =>
+                    setFeaturedPage(
+                      Math.max(0, activeFeaturedPage - 1),
+                    )
+                  }
+                  disabled={activeFeaturedPage === 0}
+                  aria-label="Show previous four featured games"
+                >
+                  <span className="featuredPrevIcon">
+                    <Icon name="arrow" size={15} />
+                  </span>
+                  Previous
+                </button>
+
+                <div className="featuredGameDots" role="group" aria-label="Choose featured games page">
+                  {Array.from(
+                    { length: featuredPageCount },
+                    (_, index) => (
+                      <button
+                        key={index}
+                        className={`featuredGameDot ${
+                          activeFeaturedPage === index ? 'active' : ''
+                        }`}
+                        type="button"
+                        onClick={() => setFeaturedPage(index)}
+                        aria-label={`Show featured games page ${index + 1}`}
+                        aria-current={
+                          activeFeaturedPage === index ? 'page' : undefined
+                        }
+                      />
+                    ),
+                  )}
+                </div>
+
+                <button
+                  className="featuredPageButton"
+                  type="button"
+                  onClick={() =>
+                    setFeaturedPage(
+                      Math.min(featuredPageCount - 1, activeFeaturedPage + 1),
+                    )
+                  }
+                  disabled={activeFeaturedPage >= featuredPageCount - 1}
+                  aria-label="Show next four featured games"
+                >
+                  Next <Icon name="arrow" size={15} />
+                </button>
+              </div>
+              )}
+            </>
           )}
         </section>
 
@@ -1546,6 +1834,14 @@ function Home({
             {activeChannels[0] ? (
               <a
                 className="discord"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  boxSizing: 'border-box',
+                  gap: 12,
+                  textDecoration: 'none',
+                }}
                 href={activeChannels[0].url}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -1553,7 +1849,17 @@ function Home({
                 Join the conversation <span>→</span>
               </a>
             ) : (
-              <button className="discord" type="button">
+              <button
+                className="discord"
+                type="button"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxSizing: 'border-box',
+                  width: '100%',
+                }}
+              >
                 {socialError
                   ? 'Community links unavailable'
                   : 'Community links coming soon'}
@@ -1649,7 +1955,7 @@ function Home({
 
       <footer>
         <div>
-          <Logo />
+          <Logo onClick={() => go('home')} />
           <p>Play something worth remembering.</p>
         </div>
 
@@ -1657,9 +1963,14 @@ function Home({
           <b>Explore</b>
           <a
             className="footerLink"
-            onClick={() => {
-              if (user) go('dashboard')
-              else window.scrollTo({ top: 0, behavior: 'smooth' })
+            role="button"
+            tabIndex={0}
+            onClick={() => go('home')}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                go('home')
+              }
             }}
           >
             Home
@@ -1795,7 +2106,7 @@ function AuthModal({
         className="modalArt"
         style={{ backgroundImage: `url(${hero})` }}
       >
-        <Logo />
+        <Logo onClick={() => setMode(null)} />
 
         <div>
           <span className="kicker">
@@ -2197,7 +2508,7 @@ function Dashboard({
   return (
     <div className="dash">
       <aside>
-        <Logo />
+        <Logo onClick={() => go('home')} />
 
         <div className="sideLabel">
           {isAdmin ? 'ADMIN CONSOLE' : 'PLAYER SPACE'}
@@ -5204,8 +5515,13 @@ export default function App() {
 
   const [view, setView] = useState<View>('home')
   const [auth, setAuth] = useState<Auth>(null)
+  const publicHomeRequested = useRef(false)
 
   const go = (nextView: View) => {
+    // A signed-in user can deliberately return to the public homepage.
+    // Any dashboard destination clears that preference, so login and
+    // dashboard navigation continue to behave as before.
+    publicHomeRequested.current = nextView === 'home' && Boolean(user)
     setView(nextView)
     window.scrollTo(0, 0)
   }
@@ -5217,14 +5533,22 @@ export default function App() {
 
   const handleLogout = async () => {
     await signOut()
+    publicHomeRequested.current = false
     setAuth(null)
     setView('home')
   }
 
   useEffect(() => {
     if (!user && view !== 'home') {
+      publicHomeRequested.current = false
       setView('home')
-    } else if (user && view === 'home') {
+    } else if (
+      user &&
+      view === 'home' &&
+      !publicHomeRequested.current
+    ) {
+      // Keep the existing signed-in landing behavior on app load.
+      // Only an explicit Home/logo action should leave the dashboard.
       setView('dashboard')
     }
   }, [user, view])
