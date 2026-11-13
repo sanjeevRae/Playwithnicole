@@ -1424,6 +1424,61 @@ function Home({
           )}
         </section>
 
+           <section className="section homeSocial">
+          <div className="center">
+            <span className="kicker">
+              JOIN THE CONVERSATION
+            </span>
+
+            <h2>Connect beyond the game</h2>
+
+            <p>
+              Follow official playwithnicole channels for community
+              news, events, and player stories.
+            </p>
+          </div>
+
+          {activeChannels.length > 0 ? (
+            <div className="homeSocialGrid">
+              {activeChannels.map((channel) => (
+                <a
+                  href={channel.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  key={channel.key}
+                >
+                  <span
+                    className={`socialIcon socialIcon--${channel.key}`}
+                  >
+                    {channel.icon}
+                  </span>
+
+                  <div>
+                    <h3>{channel.name}</h3>
+                    <p>{channel.description}</p>
+                  </div>
+
+                  <Icon name="arrow" size={18} />
+                </a>
+              ))}
+            </div>
+          ) : (
+            <div className="panel">
+              <p>
+                {socialError
+                  ? 'Community links could not be loaded. Please try again later.'
+                  : 'Community links will appear here when enabled by the administrator.'}
+              </p>
+            </div>
+          )}
+
+          <small className="externalNote">
+            <Icon name="shield" size={15} />
+            Official external community links • These do not
+            connect to your player account
+          </small>
+        </section>
+
         <section className="community" id="about">
           <div>
             <span className="kicker">
@@ -1505,63 +1560,6 @@ function Home({
               </button>
             )}
           </div>
-        </section>
-
-        {/* DYNAMIC SOCIAL LINKS */}
-
-        <section className="section homeSocial">
-          <div className="center">
-            <span className="kicker">
-              JOIN THE CONVERSATION
-            </span>
-
-            <h2>Connect beyond the game</h2>
-
-            <p>
-              Follow official playwithnicole channels for community
-              news, events, and player stories.
-            </p>
-          </div>
-
-          {activeChannels.length > 0 ? (
-            <div className="homeSocialGrid">
-              {activeChannels.map((channel) => (
-                <a
-                  href={channel.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  key={channel.key}
-                >
-                  <span
-                    className={`socialIcon socialIcon--${channel.key}`}
-                  >
-                    {channel.icon}
-                  </span>
-
-                  <div>
-                    <h3>{channel.name}</h3>
-                    <p>{channel.description}</p>
-                  </div>
-
-                  <Icon name="arrow" size={18} />
-                </a>
-              ))}
-            </div>
-          ) : (
-            <div className="panel">
-              <p>
-                {socialError
-                  ? 'Community links could not be loaded. Please try again later.'
-                  : 'Community links will appear here when enabled by the administrator.'}
-              </p>
-            </div>
-          )}
-
-          <small className="externalNote">
-            <Icon name="shield" size={15} />
-            Official external community links • These do not
-            connect to your player account
-          </small>
         </section>
 
         <section className="section how">
