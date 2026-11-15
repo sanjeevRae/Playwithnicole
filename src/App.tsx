@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useId,
   useRef,
   useState,
   type FormEvent,
@@ -822,6 +823,19 @@ export const Icon = ({
       </>
     ),
 
+    x: (
+      <>
+        <path d="m6 6 12 12M18 6 6 18" />
+      </>
+    ),
+
+    'log-out': (
+      <>
+        <path d="M10 17l5-5-5-5M15 12H3" />
+        <path d="M12 3h6a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-6" />
+      </>
+    ),
+
     'chevron-down': (
       <>
         <path d="m6 9 6 6 6-6" />
@@ -970,10 +984,11 @@ const ProfileAvatar = ({
   user: any
   profile: any
   go: (v: View) => void
-  onLogout?: () => void
+  onLogout?: () => void | Promise<void>
 }) => {
   const [open, setOpen] = useState(false)
   const [imageError, setImageError] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   const photo = profile?.photoURL || user?.photoURL
 
@@ -986,28 +1001,65 @@ const ProfileAvatar = ({
 
   const initial = String(displayName).charAt(0).toUpperCase()
   const verified = profile?.verified === 1 || profile?.verified === true
+  const menuId = useId()
+
+  useEffect(() => {
+    if (!open) return
+
+    const handleOutsidePointer = (event: MouseEvent | TouchEvent) => {
+      const target = event.target
+      if (
+        target instanceof Node &&
+        menuRef.current &&
+        !menuRef.current.contains(target)
+      ) {
+        setOpen(false)
+      }
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleOutsidePointer)
+    document.addEventListener('touchstart', handleOutsidePointer)
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('mousedown', handleOutsidePointer)
+      document.removeEventListener('touchstart', handleOutsidePointer)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [open])
+
+  const navigate = (destination: View) => {
+    setOpen(false)
+    go(destination)
+  }
+
+  const logout = () => {
+    setOpen(false)
+    void onLogout?.()
+  }
 
   return (
-    <div className="profileMenu">
-      <div
+    <div className="profileMenu" ref={menuRef}>
+      <button
         className="profileHeader"
-        role="button"
-        tabIndex={0}
+        type="button"
         aria-expanded={open}
+        aria-haspopup="menu"
+        aria-controls={menuId}
         onClick={() => setOpen((current) => !current)}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault()
-            setOpen((current) => !current)
-          }
-        }}
       >
         <span>
           {photo && !imageError ? (
             <img
               className="miniAvatar"
               src={photo}
-              alt="Profile"
+              alt=""
               onError={() => setImageError(true)}
             />
           ) : (
@@ -1015,25 +1067,23 @@ const ProfileAvatar = ({
           )}
         </span>
 
-        <div className="profileInfo">
+        <span className="profileInfo">
           <b>{displayName}</b>
           <small className={`profileVerification ${verified ? 'isVerified' : 'isUnverified'}`}>
             {verified ? 'Verified' : 'Unverified'}
             <span aria-hidden="true">{verified ? '✓' : '!'}</span>
-            
           </small>
-        </div>
-      </div>
+        </span>
+        <Icon name="chevron-down" size={15} />
+      </button>
 
       {open && (
-        <div className="profileDropdown">
+        <div className="profileDropdown" id={menuId} role="menu">
           <button
             className="dropdownItem"
             type="button"
-            onClick={() => {
-              setOpen(false)
-              go('dashboard')
-            }}
+            role="menuitem"
+            onClick={() => navigate('dashboard')}
           >
             <Icon name="grid" /> My Dashboard
           </button>
@@ -1041,10 +1091,8 @@ const ProfileAvatar = ({
           <button
             className="dropdownItem"
             type="button"
-            onClick={() => {
-              setOpen(false)
-              go('profile')
-            }}
+            role="menuitem"
+            onClick={() => navigate('profile')}
           >
             <Icon name="user" /> My Profile
           </button>
@@ -1052,23 +1100,21 @@ const ProfileAvatar = ({
           <button
             className="dropdownItem"
             type="button"
-            onClick={() => {
-              setOpen(false)
-              go('settings')
-            }}
+            role="menuitem"
+            onClick={() => navigate('settings')}
           >
             <Icon name="settings" /> Settings
           </button>
 
+          <div className="profileDropdownDivider" />
+
           <button
-            className="dropdownItem"
+            className="dropdownItem logoutDropdownItem"
             type="button"
-            onClick={() => {
-              setOpen(false)
-              onLogout?.()
-            }}
+            role="menuitem"
+            onClick={logout}
           >
-            <Icon name="arrow" /> Log out
+            <Icon name="log-out" /> Log out
           </button>
         </div>
       )}
@@ -1091,6 +1137,25 @@ function Home({
 
   const [menu, setMenu] = useState(false)
   const [featuredPage, setFeaturedPage] = useState(0)
+  const navRef = useRef<HTMLDivElement>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+
+  // Close the mobile nav drawer when tapping outside of it
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (!menu) return
+      const target = e.target as Node
+      if (
+        navRef.current &&
+        !navRef.current.contains(target) &&
+        !btnRef.current?.contains(target)
+      ) {
+        setMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [menu])
 
   const [heroBanner, setHeroBanner] =
     useState<PublicHeroBanner>(DEFAULT_PUBLIC_HERO)
@@ -1394,7 +1459,8 @@ function Home({
         @media (max-width: 600px) {
           .public #games .featuredGamesGrid {
             display: grid;
-            grid-template-columns: minmax(0, 1fr);
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
             overflow: visible;
           }
 
@@ -1403,7 +1469,7 @@ function Home({
             display: block;
             width: 100%;
             min-width: 0;
-            height: 340px;
+            height: 260px;
           }
 
           .featuredGamesPagination {
@@ -1428,9 +1494,16 @@ function Home({
             white-space: nowrap;
           }
         }
+
+        @media (max-width: 380px) {
+          .public #games .featuredGamesGrid .gameCard,
+          .public #games .featuredGamesGrid .gameCard.g2 {
+            height: 225px;
+          }
+        }
       `}</style>
 
-      <nav className="topnav">
+      <nav className="topnav" ref={navRef}>
         <Logo onClick={() => { setMenu(false); go('home') }} />
 
         <div className={`navlinks ${menu ? 'open' : ''}`}>
@@ -1456,7 +1529,7 @@ function Home({
               }}
               type="button"
             >
-              Dashboard
+              My Dashboard
             </button>
           )}
 
@@ -1479,6 +1552,39 @@ function Home({
           >
             FAQ
           </button>
+
+          {user && (
+            <>
+              <hr className="navDivider" />
+              <button
+                onClick={() => {
+                  setMenu(false)
+                  go('profile')
+                }}
+                type="button"
+              >
+                My Profile
+              </button>
+              <button
+                onClick={() => {
+                  setMenu(false)
+                  go('settings')
+                }}
+                type="button"
+              >
+                Settings
+              </button>
+              <button
+                onClick={() => {
+                  setMenu(false)
+                  signOut()
+                }}
+                type="button"
+              >
+                Log out
+              </button>
+            </>
+          )}
         </div>
 
         {user ? (
@@ -1507,7 +1613,10 @@ function Home({
         )}
 
         <button
+          ref={btnRef}
           className="menuBtn"
+          aria-expanded={menu}
+          aria-label="Toggle navigation menu"
           onClick={() => setMenu((current) => !current)}
           type="button"
         >
@@ -2269,8 +2378,8 @@ function AuthModal({
 
                   setAuthError(
                     error instanceof Error
-                      ? error.message
-                      : 'Authentication failed. Please try again.',
+                      ? `System: ${error.message}`
+                      : 'System: Authentication failed. Please try again.',
                   )
                 } finally {
                   setLoading(false)
@@ -2568,6 +2677,7 @@ function Dashboard({
 }) {
   const { user, profile } = useAuth()
   const [unreadNotifications, setUnreadNotifications] = useState(0)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   const isAdmin = profile?.role === 'admin'
 
@@ -2592,8 +2702,6 @@ function Dashboard({
     )
   }, [user?.uid, isAdmin])
 
-  if (!user) return null
-
   const safeView: View =
     !isAdmin && ADMIN_ONLY_VIEWS.includes(view)
       ? 'dashboard'
@@ -2606,6 +2714,41 @@ function Dashboard({
     }
 
     go(nextView)
+  }
+
+  // The mobile drawer is shared by player and admin dashboards.
+  // Close it whenever the active route changes or Escape is pressed.
+  useEffect(() => {
+    setMobileNavOpen(false)
+  }, [view])
+
+  useEffect(() => {
+    if (!mobileNavOpen) return
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobileNavOpen(false)
+    }
+
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
+  }, [mobileNavOpen])
+
+  if (!user) return null
+
+  const navigateFromDrawer = (nextView: View) => {
+    setMobileNavOpen(false)
+    safeGo(nextView)
+  }
+
+  const navigateFromProfile = (nextView: View) => {
+    // The admin overview has its own route. Account profile/settings
+    // screens are shared with regular members.
+    if (isAdmin && nextView === 'dashboard') {
+      safeGo('admin')
+      return
+    }
+
+    safeGo(nextView)
   }
 
   const items: [string, string, View][] = isAdmin
@@ -2628,9 +2771,28 @@ function Dashboard({
       ]
 
   return (
-    <div className="dash">
-      <aside>
-        <Logo onClick={() => go('home')} />
+    <div className={`dash ${mobileNavOpen ? 'mobileNavOpen' : ''}`}>
+      {mobileNavOpen && (
+        <button
+          className="dashMobileBackdrop"
+          type="button"
+          aria-label="Close dashboard navigation"
+          onClick={() => setMobileNavOpen(false)}
+        />
+      )}
+
+      <aside id="dashboardSidebar" aria-label={isAdmin ? 'Admin navigation' : 'Player navigation'}>
+        <div className="dashSidebarTop">
+          <Logo onClick={() => { setMobileNavOpen(false); go('home') }} />
+          <button
+            className="dashMobileClose"
+            type="button"
+            aria-label="Close dashboard navigation"
+            onClick={() => setMobileNavOpen(false)}
+          >
+            <Icon name="x" />
+          </button>
+        </div>
 
         <div className="sideLabel">
           {isAdmin ? 'ADMIN CONSOLE' : 'PLAYER SPACE'}
@@ -2641,8 +2803,9 @@ function Dashboard({
             <button
               key={item[2]}
               className={safeView === item[2] ? 'active' : ''}
-              onClick={() => safeGo(item[2])}
+              onClick={() => navigateFromDrawer(item[2])}
               type="button"
+              aria-current={safeView === item[2] ? 'page' : undefined}
             >
               <Icon name={item[0]} />
               <span>{item[1]}</span>
@@ -2653,7 +2816,7 @@ function Dashboard({
         <div className="sideBottom">
           {isAdmin && (
             <button
-              onClick={() => safeGo('admin')}
+              onClick={() => navigateFromDrawer('admin')}
               type="button"
             >
               <Icon name="shield" /> Admin Preview
@@ -2663,7 +2826,7 @@ function Dashboard({
           <ProfileAvatar
             user={user}
             profile={profile}
-            go={safeGo}
+            go={navigateFromProfile}
             onLogout={logout}
           />
         </div>
@@ -2671,8 +2834,15 @@ function Dashboard({
 
       <div className="dashMain">
         <header>
-          <button className="dashMenu" type="button">
-            <Icon name="menu" />
+          <button
+            className="dashMenu"
+            type="button"
+            aria-label={mobileNavOpen ? 'Close dashboard navigation' : 'Open dashboard navigation'}
+            aria-expanded={mobileNavOpen}
+            aria-controls="dashboardSidebar"
+            onClick={() => setMobileNavOpen((current) => !current)}
+          >
+            <Icon name={mobileNavOpen ? 'x' : 'menu'} />
           </button>
 
           <div className="search">
@@ -2706,7 +2876,7 @@ function Dashboard({
             <ProfileAvatar
               user={user}
               profile={profile}
-              go={safeGo}
+              go={navigateFromProfile}
               onLogout={logout}
             />
           </div>
@@ -2714,7 +2884,14 @@ function Dashboard({
 
         <div className="dashContent">
           {isAdmin ? (
-            <AdminPage view={safeView} go={safeGo} />
+            safeView === 'profile' || safeView === 'settings' ? (
+              <Settings
+                profile={safeView === 'profile'}
+                go={safeGo}
+              />
+            ) : (
+              <AdminPage view={safeView} go={safeGo} />
+            )
           ) : (
             <UserPage view={safeView} go={safeGo} />
           )}

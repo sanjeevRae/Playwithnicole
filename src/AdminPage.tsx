@@ -2566,12 +2566,10 @@ export function AdminPage({
   const [overviewError, setOverviewError] =
     useState('')
 
+  // Only the admin overview routes should start the overview listeners.
+  // Profile and settings are rendered by the shared account screens in App.tsx.
   const isOverviewView =
-    view !== 'manage-hero' &&
-    view !== 'manage-games' &&
-    view !== 'admin-messages' &&
-    view !== 'users' &&
-    view !== 'social-links'
+    view === 'admin' || view === 'dashboard'
 
   // ==========================================
   // GAME MANAGEMENT STATE
