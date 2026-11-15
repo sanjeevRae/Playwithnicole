@@ -2447,7 +2447,7 @@ function AuthModal({
                 </label>
               )}
 
-              {/* {mode === 'signup' && (
+              {mode === 'signup' && (
                 <>
                   <div className="strength">
                     <span />
@@ -2490,7 +2490,7 @@ function AuthModal({
 
                 <Icon name="arrow" size={16} />
               </Button>
-
+{/* 
               {mode === 'login' && (
                 <button
                   className="google"
