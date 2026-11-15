@@ -2036,7 +2036,7 @@ function AdminUserManagement() {
 
     const confirmationName = user.username || user.name
     const confirmation = window.prompt(
-      `This clears ${user.name}'s Firestore profile, saved games, notifications, and support chat, then blocks this account from using the app. It does not delete the Firebase Authentication account or Cloudinary files.\n\nType ${confirmationName} exactly to continue:`,
+      `This clears ${user.name}'s Firestore profile, saved games, notifications, and support chat, then blocks this account from using the app. It does not delete the System Authentication account or Cloudinary files.\n\nType ${confirmationName} exactly to continue:`,
     )
     if (confirmation?.trim() !== confirmationName) return
 
@@ -2522,7 +2522,7 @@ function AdminUserManagement() {
           <span>
             Only administrators can change member roles and verification status.
             Clear data removes this app's Firestore records and blocks app access;
-            it does not remove the Firebase Authentication account or Cloudinary files.
+            it does not remove the System Authentication account or files.
           </span>
         </p>
       </div>

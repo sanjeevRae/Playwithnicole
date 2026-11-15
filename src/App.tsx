@@ -322,7 +322,7 @@ function useSocialLinks() {
 
         if (firebaseError.code === 'permission-denied') {
           setError(
-            'Permission denied. Firestore rules must allow public read access to siteSettings/socialLinks.',
+            'Permission denied. System rules must allow public read access to siteSettings/socialLinks.',
           )
         } else {
           setError(
@@ -2447,7 +2447,7 @@ function AuthModal({
                 </label>
               )}
 
-              {mode === 'signup' && (
+              {/* {mode === 'signup' && (
                 <>
                   <div className="strength">
                     <span />
@@ -2525,7 +2525,7 @@ function AuthModal({
                 >
                   G&nbsp;&nbsp; Continue with Google
                 </button>
-              )}
+              )} */}
             </form>
           )}
 
@@ -2956,7 +2956,7 @@ function NotificationsView() {
       },
       (snapshotError) => {
         console.error('Notification subscription failed:', snapshotError)
-        setError('Notifications could not be loaded. Check your Firestore rules and try again.')
+        setError('Notifications could not be loaded. Please and try again.')
         setLoading(false)
       },
     )
@@ -4742,16 +4742,12 @@ function Settings({
         unenrollError && typeof unenrollError === 'object' && 'code' in unenrollError
           ? String((unenrollError as { code?: unknown }).code)
           : ''
-
-      // Firebase can expire the current session after the last enrolled
-      // second factor is removed. The factor may already be removed; do not
-      // attempt a stale reload in that case.
       if (errorCode === 'auth/user-token-expired') {
         setTotpSecret(null)
         setTotpQrCode('')
         setTotpCode('')
         await auth.signOut().catch(() => undefined)
-        setSecurityMessage('Two-factor authentication was removed. Firebase signed you out for security; please sign in again.')
+        setSecurityMessage('Two-factor authentication was removed. Please sign in again.')
         return
       }
       throw unenrollError
@@ -4882,7 +4878,7 @@ function Settings({
       setMfaRevision((value) => value + 1)
       setSecurityMessage(isVerified
         ? 'Your email address is verified and your profile has been synchronized. You can now enable authenticator-based MFA.'
-        : 'Firebase still reports this email as unverified. Open the latest verification email and try again.')
+        : 'System still reports this email as unverified. Open the latest verification email and try again.')
     } catch (error) {
       setSecurityError(error instanceof Error ? error.message : 'Could not refresh your email verification status.')
     } finally {
@@ -5210,7 +5206,7 @@ function Settings({
               </strong>
               <small>
                 {emailVerified
-                  ? 'Firebase has confirmed ownership of this email address.'
+                  ? 'System has confirmed ownership of this email address.'
                   : 'Verify your email address to confirm ownership.'}
               </small>
 
@@ -5447,7 +5443,7 @@ function Settings({
               <div className="emailVerificationNotice">
                 <div>
                   <b>Email verification required for TOTP</b>
-                  <p>Firebase requires a verified email address before an authenticator app can be enrolled.</p>
+                  <p>System requires a verified email address before an authenticator app can be enrolled.</p>
                 </div>
                 <div className="emailVerificationActions">
                   <button type="button" onClick={() => void sendVerificationEmail()} disabled={securityBusy}>
@@ -5556,7 +5552,7 @@ function Settings({
                 </form>
               ) : (
                 <div className="totpNotEnabledState">
-                  <p>When enabled, users must enter a current code from their authenticator app at sign-in. Firebase securely validates the code; the TOTP secret is not stored in Firestore.</p>
+                  <p>When enabled, users must enter a current code from their authenticator app at sign-in. System securely validates the code; the TOTP secret is not stored in Firestore.</p>
                   {hasPasswordProvider && (
                     <label className="totpReauthField">
                       Current password
@@ -5574,7 +5570,7 @@ function Settings({
             <div className="accountDeletionCard">
               <div>
                 <b>Request account deletion</b>
-                <p>Your request will be sent to the Support Team for admin review. Your Firebase Authentication account will not be deleted automatically.</p>
+                <p>Your request will be sent to the Support Team for admin review. Your Authentication account will not be deleted automatically.</p>
               </div>
               <button className="danger" type="button" onClick={() => { setDeleteUsername(''); setDeleteModalOpen(true) }}>
                 Request account deletion
@@ -5595,7 +5591,7 @@ function Settings({
             </div>
 
             <small className="sessionSecurityNote">
-              Session revocation for every device requires a trusted Firebase Admin operation. Your current session is managed by Firebase Authentication.
+              Session revocation for every device requires a trusted Admin operation. Your current session is managed by System Authentication.
             </small>
           </aside>
         </div>
