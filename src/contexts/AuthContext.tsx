@@ -433,14 +433,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const saveSignedInUser = async (firebaseUser: User) => {
+    // Firebase Authentication has succeeded. Do not write the user's
+    // Firestore profile on every login: the onAuthStateChanged listener
+    // already loads the profile and subscribes to live changes. Re-saving
+    // optional profile fields can be rejected by restrictive Firestore
+    // update rules even though the credentials are valid.
     setUser(firebaseUser)
-    await saveProfile(firebaseUser, {
-      displayName:
-        firebaseUser.displayName ??
-        firebaseUser.email?.split('@')[0] ??
-        'Player',
-      photoURL: firebaseUser.photoURL ?? null,
-    })
+
+    // Read the existing profile so admin/member routing is ready as soon as
+    // the sign-in form closes. This is intentionally read-only; the auth
+    // state listener remains responsible for creating a missing profile.
+    try {
+      const profileSnapshot = await getDoc(doc(db, 'users', firebaseUser.uid))
+      if (profileSnapshot.exists()) {
+        const profileData = profileSnapshot.data()
+        setProfile({
+          ...profileData,
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: profileData.displayName ?? firebaseUser.displayName ?? null,
+          photoURL: profileData.photoURL ?? firebaseUser.photoURL ?? null,
+        } as UserProfile)
+      }
+    } catch (profileReadError) {
+      // Authentication should not be presented as failed because a profile
+      // read is delayed or temporarily unavailable. The auth-state listener
+      // above will retry loading the profile and logs its own error if needed.
+      console.warn('Could not load the profile immediately after sign-in:', profileReadError)
+    }
   }
 
   const captureMfaChallenge = (error: MultiFactorError) => {

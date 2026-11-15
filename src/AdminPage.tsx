@@ -50,11 +50,11 @@ const HERO_CLOUDINARY_FOLDER = 'playwithnicole/hero-banners'
 // ==========================================
 
 const USER_ROLE_OPTIONS = [
-  { value: 'player', label: 'Player' },
   { value: 'user', label: 'User' },
-  { value: 'moderator', label: 'Moderator' },
   { value: 'admin', label: 'Admin' },
 ] as const
+
+type UserRole = (typeof USER_ROLE_OPTIONS)[number]['value']
 
 type AdminUser = {
   id: string
@@ -123,15 +123,12 @@ function getUserPhoto(
 
 function getUserRole(
   data: Record<string, unknown>,
-): string {
-  if (
-    typeof data.role === 'string' &&
-    data.role.trim()
-  ) {
-    return data.role.trim().toLowerCase()
-  }
-
-  return 'player'
+): UserRole {
+  // The application now supports exactly two account roles. Treat older
+  // values such as player/member/moderator as a standard User in this UI.
+  return typeof data.role === 'string' && data.role.trim().toLowerCase() === 'admin'
+    ? 'admin'
+    : 'user'
 }
 
 function getUserVerified(
@@ -144,9 +141,7 @@ function getUserVerified(
 }
 
 function formatUserRole(role: string): string {
-  if (!role) return 'Player'
-
-  return role.charAt(0).toUpperCase() + role.slice(1)
+  return role === 'admin' ? 'Admin' : 'User'
 }
 
 function formatUserJoinedDate(
@@ -1801,7 +1796,7 @@ function AdminChats() {
 // ==========================================
 
 function AdminUserManagement() {
-  const { user: currentAdmin } = useAuth()
+  const { user: currentAdmin, profile: currentAdminProfile } = useAuth()
 
   const [users, setUsers] = useState<AdminUser[]>([])
   const [loading, setLoading] = useState(true)
@@ -2541,7 +2536,7 @@ export function AdminPage({
   view: View
   go: (v: View) => void
 }) {
-  const { user: currentAdmin } = useAuth()
+  const { user: currentAdmin, profile: currentAdminProfile } = useAuth()
 
   // ==========================================
   // DYNAMIC OVERVIEW STATE
@@ -4597,6 +4592,37 @@ export function AdminPage({
   }
 
   // ==========================================
+  // ADMIN ROUTE GUARD
+  // ==========================================
+
+  // Only admin destinations may render the admin overview. Shared member
+  // destinations (for example, games) are rendered by UserPage in App.tsx.
+  const supportedAdminViews: View[] = [
+    'admin',
+    'dashboard',
+    'users',
+    'manage-games',
+    'manage-hero',
+    'admin-messages',
+    'social-links',
+  ]
+
+  if (!supportedAdminViews.includes(view)) {
+    return (
+      <section className="adminRouteFallback">
+        <PageTitle
+          kicker="ADMIN CONSOLE"
+          title="Page not found"
+          sub="This destination is not an administration page. Return to the admin overview or choose a destination from the navigation."
+        />
+        <Button onClick={() => go('admin')}>
+          Return to admin overview
+        </Button>
+      </section>
+    )
+  }
+
+  // ==========================================
   // DYNAMIC ADMIN OVERVIEW
   // ==========================================
 
@@ -4684,6 +4710,24 @@ export function AdminPage({
     })
     .slice(0, 4)
 
+  // Use the signed-in administrator's profile instead of a fixed display name.
+  const adminDisplayName =
+    (typeof currentAdminProfile?.displayName === 'string' &&
+      currentAdminProfile.displayName.trim()) ||
+    (typeof currentAdminProfile?.name === 'string' &&
+      currentAdminProfile.name.trim()) ||
+    currentAdmin?.displayName ||
+    currentAdmin?.email?.split('@')[0] ||
+    'Administrator'
+
+  const currentHour = new Date().getHours()
+  const greeting =
+    currentHour < 12
+      ? 'Good morning'
+      : currentHour < 18
+        ? 'Good afternoon'
+        : 'Good evening'
+
   // Dashboard metric data.
   const metricItems = [
     {
@@ -4724,7 +4768,7 @@ export function AdminPage({
             ADMINISTRATION
           </span>
 
-          <h1>Good morning, Nicole</h1>
+          <h1>{greeting}, {adminDisplayName}</h1>
 
           <p>
             Here's a live snapshot of your community activity.

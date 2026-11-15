@@ -1,8 +1,10 @@
 import {
+  Component,
   useEffect,
   useId,
   useRef,
   useState,
+  type ErrorInfo,
   type FormEvent,
   type ReactNode,
 } from 'react'
@@ -2168,6 +2170,17 @@ function Home({
 // AUTH MODAL
 // ==========================================
 
+function getSystemAuthError(error: unknown): string {
+  if (error instanceof Error) {
+    // Firebase SDK messages commonly start with "Firebase:". Keep the
+    // useful error text/code, but avoid repeating the SDK brand in the UI.
+    const cleanMessage = error.message.replace(/^Firebase:\s*/i, '').trim()
+    return `System: ${cleanMessage || 'Authentication failed. Please try again.'}`
+  }
+
+  return 'System: Authentication failed. Please try again.'
+}
+
 function AuthModal({
   mode,
   setMode,
@@ -2376,11 +2389,7 @@ function AuthModal({
                 } catch (error) {
                   console.error('Auth error:', error)
 
-                  setAuthError(
-                    error instanceof Error
-                      ? `System: ${error.message}`
-                      : 'System: Authentication failed. Please try again.',
-                  )
+                  setAuthError(getSystemAuthError(error))
                 } finally {
                   setLoading(false)
                 }
@@ -2663,6 +2672,50 @@ function AuthModal({
 }
 
 // ==========================================
+// DASHBOARD CONTENT ERROR BOUNDARY
+// ==========================================
+
+class DashboardContentBoundary extends Component<
+  { children: ReactNode },
+  { error: Error | null }
+> {
+  state = { error: null as Error | null }
+
+  static getDerivedStateFromError(error: Error) {
+    return { error }
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('Dashboard page failed to render:', error, info.componentStack)
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <section className="dashboardRenderError" role="alert">
+          <span className="kicker">PAGE ERROR</span>
+          <h2>This page could not be displayed</h2>
+          <p>
+            The application encountered an error while opening this page.
+            Your account and saved data have not been changed.
+          </p>
+          <code>{this.state.error.message || 'Unknown rendering error'}</code>
+          <button
+            className="btn secondary"
+            type="button"
+            onClick={() => window.location.reload()}
+          >
+            Reload page
+          </button>
+        </section>
+      )
+    }
+
+    return this.props.children
+  }
+}
+
+// ==========================================
 // DASHBOARD
 // ==========================================
 
@@ -2675,11 +2728,11 @@ function Dashboard({
   go: (v: View) => void
   logout: () => void
 }) {
-  const { user, profile } = useAuth()
+  const { user, profile, loading: authLoading } = useAuth()
   const [unreadNotifications, setUnreadNotifications] = useState(0)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
-  const isAdmin = profile?.role === 'admin'
+  const isAdmin = String(profile?.role ?? '').trim().toLowerCase() === 'admin'
 
   useEffect(() => {
     if (!user?.uid || isAdmin) {
@@ -2733,7 +2786,26 @@ function Dashboard({
     return () => document.removeEventListener('keydown', handleEscape)
   }, [mobileNavOpen])
 
-  if (!user) return null
+  if (authLoading) {
+    return (
+      <div className="dashboardSessionState" role="status" aria-live="polite">
+        <span className="gameSpinner" />
+        <p>Restoring your session...</p>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <div className="dashboardSessionState" role="alert">
+        <h2>Your session is not available</h2>
+        <p>Please return to the homepage and sign in again.</p>
+        <button className="btn secondary" type="button" onClick={() => go('home')}>
+          Return to homepage
+        </button>
+      </div>
+    )
+  }
 
   const navigateFromDrawer = (nextView: View) => {
     setMobileNavOpen(false)
@@ -2883,18 +2955,30 @@ function Dashboard({
         </header>
 
         <div className="dashContent">
-          {isAdmin ? (
-            safeView === 'profile' || safeView === 'settings' ? (
-              <Settings
-                profile={safeView === 'profile'}
-                go={safeGo}
-              />
+          <DashboardContentBoundary key={safeView}>
+            {isAdmin ? (
+              safeView === 'profile' || safeView === 'settings' ? (
+                <Settings
+                  profile={safeView === 'profile'}
+                  go={safeGo}
+                />
+              ) : safeView === 'games' ? (
+                // Render game discovery directly for admins. Keeping this
+                // route explicit prevents it falling through to AdminPage.
+                <Games go={safeGo} />
+              ) : safeView === 'messages' ? (
+                <Messages />
+              ) : safeView === 'social' ? (
+                <Social />
+              ) : safeView === 'notifications' ? (
+                <NotificationsView />
+              ) : (
+                <AdminPage view={safeView} go={safeGo} />
+              )
             ) : (
-              <AdminPage view={safeView} go={safeGo} />
-            )
-          ) : (
-            <UserPage view={safeView} go={safeGo} />
-          )}
+              <UserPage view={safeView} go={safeGo} />
+            )}
+          </DashboardContentBoundary>
         </div>
       </div>
     </div>
@@ -5853,11 +5937,13 @@ export default function App() {
       {view === 'home' ? (
         <Home go={go} auth={setAuth} />
       ) : (
-        <Dashboard
-          view={view}
-          go={go}
-          logout={handleLogout}
-        />
+        <DashboardContentBoundary key={view}>
+          <Dashboard
+            view={view}
+            go={go}
+            logout={handleLogout}
+          />
+        </DashboardContentBoundary>
       )}
 
       {auth && (
