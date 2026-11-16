@@ -1,5 +1,6 @@
 import {
   Component,
+  useCallback,
   useEffect,
   useId,
   useRef,
@@ -1139,6 +1140,12 @@ function Home({
 
   const [menu, setMenu] = useState(false)
   const [featuredPage, setFeaturedPage] = useState(0)
+  const [showCommunityPopup, setShowCommunityPopup] = useState(false)
+  const communityPopupTriggered = useRef(false)
+  const closeCommunityPopup = useCallback(
+    () => setShowCommunityPopup(false),
+    [],
+  )
   const navRef = useRef<HTMLDivElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
 
@@ -1164,8 +1171,37 @@ function Home({
 
   const {
     activeChannels,
+    loading: socialLoading,
     error: socialError,
   } = useSocialLinks()
+
+  // Show the welcome popup once per browser tab session, after the live
+  // Firestore social links have loaded. The same activeChannels collection
+  // powers the homepage section, footer, and popup.
+  useEffect(() => {
+    if (
+      socialLoading ||
+      activeChannels.length === 0 ||
+      communityPopupTriggered.current
+    ) {
+      return
+    }
+
+    communityPopupTriggered.current = true
+    const sessionKey = 'playwithnicole-community-popup-shown'
+
+    try {
+      if (window.sessionStorage.getItem(sessionKey) === '1') return
+      window.sessionStorage.setItem(sessionKey, '1')
+      setShowCommunityPopup(true)
+    } catch (storageError) {
+      console.warn(
+        'Could not access session storage for the community popup:',
+        storageError,
+      )
+      setShowCommunityPopup(true)
+    }
+  }, [socialLoading, activeChannels.length])
 
   const {
     games: featuredGames,
@@ -1830,7 +1866,7 @@ function Home({
           )}
         </section>
 
-           <section className="section homeSocial">
+           <section className="section homeSocial" id="homeSocial">
           <div className="center">
             <span className="kicker">
               JOIN THE CONVERSATION
@@ -1949,40 +1985,19 @@ function Home({
               </div>
             ))}
 
-            {activeChannels[0] ? (
-              <a
-                className="discord"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  boxSizing: 'border-box',
-                  gap: 12,
-                  textDecoration: 'none',
-                }}
-                href={activeChannels[0].url}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Join the conversation <span>→</span>
-              </a>
-            ) : (
-              <button
-                className="discord"
-                type="button"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxSizing: 'border-box',
-                  width: '100%',
-                }}
-              >
-                {socialError
-                  ? 'Community links unavailable'
-                  : 'Community links coming soon'}
-              </button>
-            )}
+            <button
+              className="discord"
+              type="button"
+              onClick={() => {
+                setMenu(false)
+                document.getElementById('homeSocial')?.scrollIntoView({
+                  behavior: 'smooth',
+                  block: 'start',
+                })
+              }}
+            >
+              Join the conversation <span>→</span>
+            </button>
           </div>
         </section>
 
@@ -2162,6 +2177,126 @@ function Home({
           © {new Date().getFullYear()} playwithnicole.
         </small>
       </footer>
+
+      {showCommunityPopup && activeChannels.length > 0 && (
+        <CommunityWelcomePopup
+          activeChannels={activeChannels}
+          onClose={closeCommunityPopup}
+        />
+      )}
+    </div>
+  )
+}
+
+function CommunityWelcomePopup({
+  activeChannels,
+  onClose,
+}: {
+  activeChannels: SocialChannel[]
+  onClose: () => void
+}) {
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    closeButtonRef.current?.focus()
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [onClose])
+
+  return (
+    <div
+      className="communityPopupOverlay"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
+    >
+      <section
+        className="communityPopup"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="communityPopupTitle"
+        aria-describedby="communityPopupDescription"
+      >
+        <button
+          ref={closeButtonRef}
+          className="communityPopupClose"
+          type="button"
+          onClick={onClose}
+          aria-label="Close community links"
+        >
+          <Icon name="close" size={19} />
+        </button>
+
+        <header className="communityPopupHeader">
+          <span className="communityPopupKicker">
+            JOIN THE CONVERSATION
+          </span>
+          <h2 id="communityPopupTitle">Connect beyond the game</h2>
+          <p id="communityPopupDescription">
+            Follow official playwithnicole channels for community news,
+            events, and player stories.
+          </p>
+        </header>
+
+        <div className="communityPopupGrid">
+          {activeChannels.map((channel) => (
+            <a
+              className="communityPopupLink"
+              href={channel.url}
+              key={channel.key}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`Visit our ${channel.name} community (opens in a new tab)`}
+            >
+              <span
+                className={`socialIcon socialIcon--${channel.key}`}
+                aria-hidden="true"
+              >
+                {channel.icon}
+              </span>
+              <span className="communityPopupLinkText">
+                <strong>{channel.name}</strong>
+                <span>{channel.description}</span>
+              </span>
+              <span className="communityPopupArrow" aria-hidden="true">
+                →
+              </span>
+            </a>
+          ))}
+        </div>
+
+        <div className="communityPopupNote">
+          <Icon name="shield" size={15} />
+          <span>
+            Official external community links • These do not connect to your
+            player account
+          </span>
+        </div>
+
+        <button
+          className="communityPopupContinue"
+          type="button"
+          onClick={onClose}
+        >
+          Continue to website <span aria-hidden="true">→</span>
+        </button>
+
+        <p className="communityPopupFootnote">
+          Your community is here whenever you’re ready.
+        </p>
+      </section>
     </div>
   )
 }
